@@ -1,0 +1,7 @@
+include ':app'
+include ':capacitor-cordova-android-plugins'
+project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
+include ':ai-chat'
+project(':ai-chat').projectDir = new File('./llama.cpp/examples/llama.android/lib/')
+
+apply from: 'capacitor.settings.gradle'

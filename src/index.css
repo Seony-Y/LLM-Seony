@@ -1,0 +1,26 @@
+:root {
+  color: #273230;
+  background: #f2f3ed;
+  font: 16px/1.5 'Trebuchet MS', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(rgba(30, 77, 72, 0.05) 1px, transparent 1px),
+    #f2f3ed;
+  background-size: 100% 32px;
+}
+
+button,
+input {
+  letter-spacing: 0;
+}
