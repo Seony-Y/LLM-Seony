@@ -59,6 +59,26 @@ export async function setDeleted(id: string, deleted: boolean): Promise<void> {
   notifyRecords()
 }
 
+/** 내용은 지우고, 지웠다는 사실만 남겨 다른 기기와 서버에서도 지워지게 한다. */
+export async function emptyTrash(): Promise<void> {
+  const transaction = (await database).transaction('records', 'readwrite')
+  for (const record of await transaction.store.getAll()) {
+    if (!record.deletedAt || isPurged(record)) continue
+    await transaction.store.put({
+      ...record,
+      data: { purged: true },
+      updatedAt: nextTimestamp(record.updatedAt),
+      dirty: 1,
+    } as unknown as AssistantRecord)
+  }
+  await transaction.done
+  notifyRecords()
+}
+
+export function isPurged(record: AssistantRecord) {
+  return 'purged' in record.data
+}
+
 const LEGACY_KEY = 'personal-assistant.schedules'
 
 interface LegacySchedule {

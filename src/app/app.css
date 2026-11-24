@@ -49,8 +49,11 @@
 }
 
 .room canvas {
+  outline: none;
   cursor: pointer;
   touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .room-fallback {
@@ -153,9 +156,16 @@
 .actions button,
 .account button,
 .settings > button,
+.trash-title button,
+.save-status button,
 .file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
   padding: 8px 18px;
+  line-height: 1.2;
+  text-align: center;
   border: 1px solid var(--line);
   border-radius: 22px;
   cursor: pointer;
@@ -282,6 +292,14 @@
   font-size: 14px;
 }
 
+.save-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .settings summary {
   padding: 12px 0;
   cursor: pointer;
@@ -293,12 +311,21 @@
 }
 
 .settings > button,
+.settings > .trash-title,
+.settings > .confirm,
 .settings > .actions,
 .settings > .account,
 .settings > .toggle,
 .settings > p,
 .settings > h2 {
   margin-top: 12px;
+}
+
+.trash-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .settings h2 {
@@ -361,6 +388,10 @@
 
 .login input {
   background: var(--field);
+}
+
+.file {
+  position: relative;
 }
 
 .file input {

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
 import { parseInput } from '../features/assistant/parseInput'
-import { diaryBody, greeting, localDate, pokeLine, sceneFor, type Line } from '../features/assistant/speech'
+import { diaryBody, greeting, localDate, pokeLine, sceneFor, weatherLine, type Line } from '../features/assistant/speech'
 import { composeMessage, dial } from '../features/device/deviceActions'
 import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
 import {
@@ -11,6 +11,7 @@ import {
   type TodayWeather,
 } from '../features/online/weather'
 import { saveRecord } from '../features/records/recordStore'
+import { serverConfigured } from '../features/records/serverRecords'
 import { useRecords } from '../features/records/useRecords'
 import { useSync } from '../features/records/useSync'
 import { Room } from '../features/room/Room'
@@ -21,7 +22,7 @@ import { Settings } from './Settings'
 import './app.css'
 
 const MINUTE = 60_000
-const WEATHER_MINUTES = 60
+const WEATHER_MINUTES = 30
 
 const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
   {
@@ -57,28 +58,44 @@ function App() {
   const [line, setLine] = useState<Line | null>(null)
   const [pokes, setPokes] = useState(0)
   const [hops, setHops] = useState(0)
+  const [cheers, setCheers] = useState(0)
   const [thinking, setThinking] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const { loaded, settings, events, todos, diaries } = records
   const state = useMemo(
     () => ({ now, settings, events, todos, weather }),
     [now, settings, events, todos, weather],
   )
+  const latestState = useRef(state)
   const scene = sceneFor(state)
   const spoken = line ?? greeting(state)
+
+  useEffect(() => {
+    latestState.current = state
+  }, [state])
 
   useEffect(() => {
     document.documentElement.dataset.scene = scene
   }, [scene])
 
   useEffect(() => {
+    let loadedAt = 0
     const load = async () => {
-      if (await hasWeatherPermission()) setWeather(await getTodayWeather())
+      if (Date.now() - loadedAt < WEATHER_MINUTES * MINUTE || !(await hasWeatherPermission())) return
+      loadedAt = Date.now()
+      setWeather(await getTodayWeather())
     }
-    const run = () => void load().catch(console.error)
+    const run = () => {
+      if (document.visibilityState === 'visible') void load().catch(console.error)
+    }
     run()
     const timer = setInterval(run, WEATHER_MINUTES * MINUTE)
-    return () => clearInterval(timer)
+    document.addEventListener('visibilitychange', run)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', run)
+    }
   }, [])
 
   useEffect(() => {
@@ -124,6 +141,10 @@ function App() {
     }
   }
 
+  async function scheduleReminders() {
+    if (await requestNotificationPermission()) await applyNotifications(latestState.current)
+  }
+
   async function confirm(value: Draft) {
     switch (value.type) {
       case 'message':
@@ -134,9 +155,10 @@ function App() {
         break
       case 'event': {
         const { title, startsAt } = value
-        await requestNotificationPermission()
         await saveRecord('event', { title, note: '', startsAt: startsAt.toISOString(), remind: true })
         setView('event')
+        // 저장은 알림 권한과 상관없이 끝낸다.
+        void scheduleReminders().catch(console.error)
         break
       }
       case 'todo':
@@ -157,6 +179,10 @@ function App() {
   }
 
   function tapRoom(target: RoomTarget) {
+    if (target === 'weather') {
+      void enableWeather().catch((error: Error) => setLine({ title: '날씨를 못 봤어요.', body: error.message }))
+      return
+    }
     if (target !== 'assistant') return setView(target)
     setHops((count) => count + 1)
     setPokes((count) => count + 1)
@@ -165,8 +191,11 @@ function App() {
 
   async function enableWeather() {
     await requestWeatherPermission()
-    setWeather(await getTodayWeather())
-    setLine(null)
+    const today = await getTodayWeather()
+    setWeather(today)
+    const spokenWeather = weatherLine(today, new Date())
+    setLine(spokenWeather)
+    return spokenWeather.title
   }
 
   return (
@@ -176,7 +205,7 @@ function App() {
           <h1>{spoken.title}</h1>
           <p>{spoken.body}</p>
         </div>
-        <Room scene={scene} hops={hops} onTap={tapRoom} />
+        <Room scene={scene} sky={weather?.sky ?? 'cloud'} hops={hops} cheers={cheers} onTap={tapRoom} />
       </section>
 
       <section className="panel">
@@ -231,6 +260,7 @@ function App() {
             records={records}
             now={now}
             onDone={() => {
+              setCheers((count) => count + 1)
               setHops((count) => count + 1)
               setLine({ title: '하나 끝!', body: '오늘 일기에 적어둘게요.' })
             }}
@@ -238,8 +268,24 @@ function App() {
         </div>
 
         <footer>
-          <p role={sync.error ? 'alert' : undefined}>{sync.error || saveStatus(sync, records.pending)}</p>
-          <Settings records={records} sync={sync} onEnableWeather={enableWeather} />
+          <div className="save-status">
+            <p role={sync.error ? 'alert' : undefined}>
+              {sync.error || saveStatus(sync, records.pending)}
+            </p>
+            {serverConfigured && !sync.connected && (
+              <button type="button" onClick={() => setSettingsOpen(true)}>
+                서버 연결하기
+              </button>
+            )}
+          </div>
+          <Settings
+            records={records}
+            sync={sync}
+            open={settingsOpen}
+            onToggle={setSettingsOpen}
+            weatherOn={weather !== null}
+            onEnableWeather={enableWeather}
+          />
         </footer>
       </section>
     </main>

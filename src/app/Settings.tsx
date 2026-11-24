@@ -6,7 +6,7 @@ import {
   requestNotificationPermission,
 } from '../features/notify/notifications'
 import { exportBackup, importBackup } from '../features/records/backup'
-import { saveRecord, setDeleted } from '../features/records/recordStore'
+import { emptyTrash, saveRecord, setDeleted } from '../features/records/recordStore'
 import { SETTINGS_ID, type AssistantRecord, type RecordData, type Tone } from '../features/records/types'
 import { serverConfigured } from '../features/records/serverRecords'
 import type { Records } from '../features/records/useRecords'
@@ -15,13 +15,17 @@ import type { Sync } from '../features/records/useSync'
 interface SettingsProps {
   records: Records
   sync: Sync
-  onEnableWeather: () => Promise<void>
+  open: boolean
+  onToggle: (open: boolean) => void
+  weatherOn: boolean
+  onEnableWeather: () => Promise<string>
 }
 
-export function Settings({ records, sync, onEnableWeather }: SettingsProps) {
+export function Settings({ records, sync, open, onToggle, weatherOn, onEnableWeather }: SettingsProps) {
   const { settings } = records
   const [message, setMessage] = useState('')
   const [exact, setExact] = useState(true)
+  const [emptying, setEmptying] = useState(false)
   const isNative = Capacitor.isNativePlatform()
 
   useEffect(() => {
@@ -55,7 +59,7 @@ export function Settings({ records, sync, onEnableWeather }: SettingsProps) {
   }
 
   return (
-    <details className="settings">
+    <details className="settings" open={open} onToggle={(event) => onToggle(event.currentTarget.open)}>
       <summary>설정과 저장</summary>
       <div className="fields">
         <TextField
@@ -89,7 +93,7 @@ export function Settings({ records, sync, onEnableWeather }: SettingsProps) {
         </button>
       )}
       <button type="button" onClick={() => attempt(onEnableWeather)}>
-        현재 위치 날씨 켜기
+        {weatherOn ? '날씨 새로고침' : '현재 위치 날씨 켜기'}
       </button>
 
       <Server sync={sync} attempt={attempt} />
@@ -114,7 +118,35 @@ export function Settings({ records, sync, onEnableWeather }: SettingsProps) {
 
       {records.trash.length > 0 && (
         <>
-          <h2>휴지통, 30일 동안 보여요</h2>
+          <div className="trash-title">
+            <h2>휴지통, 30일 동안 보여요</h2>
+            <button type="button" onClick={() => setEmptying(true)}>
+              비우기
+            </button>
+          </div>
+          {emptying && (
+            <div className="confirm" role="alert">
+              <p>휴지통을 모두 지울까요? 되살릴 수 없어요.</p>
+              <div className="actions">
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() =>
+                    attempt(async () => {
+                      await emptyTrash()
+                      setEmptying(false)
+                      return '휴지통을 비웠습니다.'
+                    })
+                  }
+                >
+                  모두 지우기
+                </button>
+                <button type="button" onClick={() => setEmptying(false)}>
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
           <ul>
             {records.trash.map((record) => (
               <li key={record.id}>
@@ -166,6 +198,7 @@ interface ServerProps {
 }
 
 function Server({ sync, attempt }: ServerProps) {
+  const [visible, setVisible] = useState(false)
   if (!serverConfigured) return <p>서버가 아직 연결되지 않아 이 기기에만 저장됩니다.</p>
 
   if (sync.connected) {
@@ -202,14 +235,20 @@ function Server({ sync, attempt }: ServerProps) {
     <form className="login" onSubmit={submit}>
       <input
         name="key"
-        type="password"
+        type={visible ? 'text' : 'password'}
+        autoCapitalize="off"
         autoComplete="current-password"
+        autoCorrect="off"
+        spellCheck={false}
         placeholder="서버 비밀 키"
         aria-label="서버 비밀 키"
         required
       />
       <div className="actions">
         <button className="primary">서버 연결</button>
+        <button type="button" onClick={() => setVisible(!visible)}>
+          {visible ? '키 가리기' : '키 보기'}
+        </button>
       </div>
     </form>
   )

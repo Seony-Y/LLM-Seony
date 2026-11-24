@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest'
 import { getPlatformProxy } from 'wrangler'
 import worker, { type Env } from './index'
@@ -11,7 +11,9 @@ beforeAll(async () => {
   const proxy = await getPlatformProxy<Env>({ persist: false })
   env = { ...proxy.env, ACCESS_KEY: KEY }
   dispose = proxy.dispose
-  const sql = readFileSync('server/migrations/0001_records.sql', 'utf8').replace(/^--.*$/gm, '')
+  const files = readdirSync('server/migrations').sort()
+  const source = files.map((name) => readFileSync(`server/migrations/${name}`, 'utf8')).join('\n')
+  const sql = source.replace(/^--.*$/gm, '')
   // 트리거 본문의 세미콜론에서는 자르지 않는다.
   const statements = sql.match(/\s*CREATE TRIGGER[\s\S]*?END;|[^;]+;/g) ?? []
   for (const statement of statements.map((text) => text.trim()).filter((text) => text.length > 1)) {
@@ -71,6 +73,14 @@ test('나중 값이 이기고 이전 값은 이력에 남는다', async () => {
   expect(second).toMatchObject({ data: { t: 'v2' } })
   expect(second.seq).toBeGreaterThan(first.seq)
   expect((await env.DB.prepare('SELECT * FROM record_history').all()).results).toHaveLength(1)
+})
+
+test('휴지통에서 비운 기록은 이력까지 지운다', async () => {
+  await push(row('a', '비밀', '2026-01-01T00:00:00Z'), row('b', 'x', '2026-01-01T00:00:00Z'))
+  await push(row('a', '비밀2', '2026-01-02T00:00:00Z'), row('b', 'y', '2026-01-02T00:00:00Z'))
+  await push({ ...row('a', '', '2026-01-03T00:00:00Z'), data: { purged: true } })
+  const { results } = await env.DB.prepare('SELECT id FROM record_history').all()
+  expect(results).toEqual([{ id: 'b' }])
 })
 
 test('미래 시각은 지금으로 당긴다', async () => {

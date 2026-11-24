@@ -107,6 +107,16 @@ export function greeting(state: DayState): Line {
   }
 }
 
+const SKY_WORDS = { sun: '맑아요', cloud: '구름이 꼈어요', snow: '눈이 와요', rain: '비가 와요' }
+
+export function weatherLine({ sky, temperature, rainAt }: TodayWeather, now: Date): Line {
+  const later = rainAt && rainAt > now && sky !== 'rain'
+  return {
+    title: `지금 ${temperature}°, ${SKY_WORDS[sky]}.`,
+    body: later ? `${formatTime(rainAt)}부터 비 온대요. 우산 챙겨요.` : '나갈 때 참고해요.',
+  }
+}
+
 export function pokeLine(settings: RecordData['setting'], turn: number): Line {
   const lines: Line[] =
     settings.tone === 'nag'

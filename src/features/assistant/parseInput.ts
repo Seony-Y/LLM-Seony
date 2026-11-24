@@ -7,6 +7,8 @@ export type ParsedInput =
   | { type: 'question'; text: string }
 
 const WEEKDAYS = '월화수목금토일'
+const HANGUL_HOURS: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4 }
+const MAX_DELAY = 7 * 24 * 60
 const DAY_OFFSET: Record<string, number> = { 오늘: 0, 내일: 1, 모레: 2, 글피: 3 }
 
 export function parseInput(input: string, now = new Date()): ParsedInput {
@@ -42,6 +44,30 @@ function toMessage(quoted: string) {
 
 function parseEvent(text: string, now: Date): ParsedInput | null {
   if (text.endsWith('?')) return null
+  return parseDelay(text, now) ?? parseClock(text, now)
+}
+
+/** "10분 뒤", "한 시간 반 후", "1시간 30분 이따가" */
+function parseDelay(text: string, now: Date): ParsedInput | null {
+  const delay = text.match(
+    /(?:(\d+|[한두세네])\s*시간(?:\s*(반))?)?\s*(?:(\d+)\s*분)?\s*(?:뒤|후|있다가|이따가?)(?:에)?(?![가-힣])/,
+  )
+  if (!delay) return null
+  const [matched, hourText, half, minuteText] = delay
+  if (!hourText && !minuteText) return null
+  const hours = hourText ? (HANGUL_HOURS[hourText] ?? Number(hourText)) : 0
+  const minutes = hours * 60 + (half ? 30 : 0) + Number(minuteText ?? 0)
+  if (minutes < 1 || minutes > MAX_DELAY) return null
+
+  const startsAt = new Date(now.getTime() + minutes * 60_000)
+  // 분 단위로 저장하므로 말한 시간보다 일찍 울리지 않게 올린다.
+  if (startsAt.getSeconds() || startsAt.getMilliseconds()) {
+    startsAt.setMinutes(startsAt.getMinutes() + 1, 0, 0)
+  }
+  return { type: 'event', title: toTitle(text.replace(matched, ' ')), startsAt }
+}
+
+function parseClock(text: string, now: Date): ParsedInput | null {
   const time = text.match(
     /(?:(새벽|아침|오전|점심|낮|오후|저녁|밤)\s*)?(?<!\d)(\d{1,2})(?:시(?!간)(?:\s*(반)|\s*(\d{1,2})분)?|:(\d{2}))(?:에)?/,
   )
@@ -78,16 +104,28 @@ function parseEvent(text: string, now: Date): ParsedInput | null {
   if (period === '밤' && hour < 5) startsAt.setDate(startsAt.getDate() + 1)
   startsAt.setHours(hour, minute, 0, 0)
 
+  // "8시"가 지났으면 같은 날 저녁 8시로 본다.
+  const evening = new Date(startsAt)
+  evening.setHours(hour + 12)
+  if (startsAt <= now && evening > now && !period && hour < 12 && !date && !weekday) {
+    startsAt.setTime(evening.getTime())
+  }
   if (startsAt <= now) {
     if (!day) startsAt.setDate(startsAt.getDate() + 1)
     else if (date) startsAt.setFullYear(startsAt.getFullYear() + 1)
     else if (weekday && !weekday[1]) startsAt.setDate(startsAt.getDate() + 7)
   }
 
+  return { type: 'event', title: toTitle(rest), startsAt }
+}
+
+function toTitle(rest: string) {
   const title = rest
-    .replace(/(?:일정\s*)?(?:등록|추가|기록)해\s*(?:줘|줄래)$|알려\s*줘$/, '')
+    .replace(/일정(?:을|으로)?\s*(?:등록|추가|기록|잡기|넣기)?\s*(?:(?:해|잡아|넣어)\s*(?:줘|줄래))?\s*$/, '')
+    .replace(/(?:등록|추가|기록)해\s*(?:줘|줄래)\s*$|알려\s*줘\s*$/, '')
+    .replace(/^\s*일정\s*(?:등록|추가)\s*/, '')
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^에\s+/, '')
-  return { type: 'event', title: title || '일정', startsAt }
+  return title || '일정'
 }
