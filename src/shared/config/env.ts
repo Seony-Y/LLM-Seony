@@ -3,8 +3,5 @@ function optional(value: string | undefined) {
 }
 
 export const env = {
-  googleAndroidClientId: optional(
-    import.meta.env.VITE_GOOGLE_ANDROID_CLIENT_ID,
-  ),
-  googleWebClientId: optional(import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID),
+  serverUrl: optional(import.meta.env.VITE_SERVER_URL).replace(/\/+$/, ''),
 } as const
