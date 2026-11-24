@@ -1,15 +1,19 @@
 import { Geolocation } from '@capacitor/geolocation'
+import { findPlace } from './place'
 
-export type Sky = 'sun' | 'cloud' | 'snow' | 'rain'
+export type Sky = 'sun' | 'moon' | 'cloud' | 'snow' | 'rain'
 
 export interface TodayWeather {
   sky: Sky
+  isDay: boolean
+  /** 동 이름. 알 수 없으면 빈 문자열. */
+  place: string
   temperature: number
   rainAt: Date | null
 }
 
 interface OpenMeteoResponse {
-  current: { temperature_2m: number; weather_code: number }
+  current: { temperature_2m: number; weather_code: number; is_day: number }
   hourly: { time: number[]; weather_code: number[] }
 }
 
@@ -20,10 +24,11 @@ function isRain(code: number) {
 }
 
 /** WMO 날씨 코드를 하늘 모양으로 나눈다. */
-export function skyOf(code: number): Sky {
+export function skyOf(code: number, isDay = true): Sky {
   if (isRain(code)) return 'rain'
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow'
-  return code <= 1 ? 'sun' : 'cloud'
+  if (code > 1) return 'cloud'
+  return isDay ? 'sun' : 'moon'
 }
 
 export async function hasWeatherPermission(): Promise<boolean> {
@@ -38,7 +43,7 @@ export async function hasWeatherPermission(): Promise<boolean> {
 /** 사용자가 날씨를 켤 때만 부른다. */
 export async function requestWeatherPermission(): Promise<void> {
   try {
-    await Geolocation.requestPermissions({ permissions: ['coarseLocation'] })
+    await Geolocation.requestPermissions({ permissions: ['location'] })
   } catch {
     // 웹은 위치를 읽을 때 브라우저가 묻는다.
   }
@@ -49,13 +54,16 @@ export async function getTodayWeather(now = new Date()): Promise<TodayWeather> {
   const params = new URLSearchParams({
     latitude: position.coords.latitude.toFixed(2),
     longitude: position.coords.longitude.toFixed(2),
-    current: 'temperature_2m,weather_code',
+    current: 'temperature_2m,weather_code,is_day',
     hourly: 'weather_code',
     forecast_days: '2',
     timeformat: 'unixtime',
     timezone: 'auto',
   })
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`).catch(() => null)
+  const [response, place] = await Promise.all([
+    fetch(`https://api.open-meteo.com/v1/forecast?${params}`).catch(() => null),
+    findPlace(position.coords),
+  ])
   if (!response?.ok) throw new Error('날씨 서버에서 응답을 받지 못했습니다.')
 
   const data = (await response.json()) as OpenMeteoResponse
@@ -65,7 +73,9 @@ export async function getTodayWeather(now = new Date()): Promise<TodayWeather> {
     return at + HOUR > now.getTime() && at < endOfDay && isRain(data.hourly.weather_code[index])
   })
   return {
-    sky: skyOf(data.current.weather_code),
+    sky: skyOf(data.current.weather_code, data.current.is_day === 1),
+    isDay: data.current.is_day === 1,
+    place,
     temperature: Math.round(data.current.temperature_2m),
     rainAt: rainIndex < 0 ? null : new Date(data.hourly.time[rainIndex] * 1000),
   }

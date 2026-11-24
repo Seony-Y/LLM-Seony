@@ -40,6 +40,34 @@
   pointer-events: auto;
 }
 
+.weather {
+  min-height: 32px;
+  color: var(--soft);
+  font-size: 15px;
+  pointer-events: auto;
+}
+
+.gear {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: 0;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--soft);
+}
+
+@media (min-width: 861px) {
+  .gear {
+    position: fixed;
+    top: 24px;
+    right: max(16px, calc((100vw - 1280px) / 2));
+  }
+}
+
 .room,
 .room canvas {
   position: absolute;
@@ -300,14 +328,61 @@
   justify-content: space-between;
 }
 
-.settings summary {
-  padding: 12px 0;
-  cursor: pointer;
+.settings-dialog {
+  width: min(100% - 32px, 440px);
+  max-height: min(100% - 48px, 720px);
+  padding: 0;
+  border: 0;
+  border-radius: 32px;
+  color: var(--panel-soft);
+  background: linear-gradient(var(--panel), var(--panel)), var(--field);
+  font-size: 14px;
 }
 
-.settings[open] {
-  display: grid;
-  gap: 12px;
+.settings-dialog::backdrop {
+  background: #20243a73;
+}
+
+.settings {
+  padding: 24px;
+}
+
+.settings header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.settings header h2 {
+  color: var(--panel-ink);
+  font-size: 22px;
+}
+
+.settings header button {
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  font-size: 24px;
+}
+
+.settings li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings li > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--panel-ink);
+}
+
+.settings li button {
+  min-height: 44px;
 }
 
 .settings > button,
@@ -413,8 +488,13 @@
   }
 
   .stage {
-    height: 50vh;
-    min-height: 420px;
+    height: 56vh;
+    min-height: 470px;
+  }
+
+  .room {
+    top: 60px;
+    height: calc(100% - 60px);
   }
 
   .speech {

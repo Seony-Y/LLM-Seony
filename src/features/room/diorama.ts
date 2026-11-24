@@ -481,9 +481,7 @@ export function createDiorama(
   }
 
   function showSky() {
-    // 밤에는 해 대신 달을 띄운다.
-    const shown = sky === 'sun' && scene === 'night' ? 'moon' : sky
-    for (const [name, object] of Object.entries(props.skies)) object.visible = name === shown
+    for (const [name, object] of Object.entries(props.skies)) object.visible = name === sky
   }
 
   function setSky(next: Sky) {

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
 import { parseInput, parseShared } from '../features/assistant/parseInput'
-import { diaryBody, greeting, localDate, pokeLine, sceneFor, weatherLine, type Line } from '../features/assistant/speech'
+import { diaryBody, greeting, localDate, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
 import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
 import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
 import {
@@ -16,6 +16,8 @@ import { useRecords } from '../features/records/useRecords'
 import { useSync } from '../features/records/useSync'
 import { Room } from '../features/room/Room'
 import type { RoomTarget } from '../features/room/diorama'
+import { onWidgetPrompt, updateWidget } from '../features/widget/roomWidget'
+import { buildTimeline } from '../features/widget/timeline'
 import { ConfirmCard, type Draft } from './ConfirmCard'
 import { RecordList, type View } from './RecordList'
 import { Settings } from './Settings'
@@ -61,6 +63,7 @@ function App() {
   const [cheers, setCheers] = useState(0)
   const [thinking, setThinking] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   const { loaded, settings, events, todos, diaries } = records
   const state = useMemo(
@@ -68,6 +71,7 @@ function App() {
     [now, settings, events, todos, weather],
   )
   const latestState = useRef(state)
+  const promptInput = useRef<HTMLInputElement>(null)
   const scene = sceneFor(state)
   const spoken = line ?? greeting(state)
 
@@ -114,6 +118,12 @@ function App() {
     // 시간이 흐르는 것만으로는 예약을 다시 하지 않는다.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, settings, events, todos])
+
+  useEffect(() => {
+    if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
+  }, [loaded, settings, events, todos, weather])
+
+  useEffect(() => onWidgetPrompt(() => promptInput.current?.focus()), [])
 
   useEffect(() => {
     if (!loaded || now.getHours() < 21) return
@@ -192,13 +202,19 @@ function App() {
 
   function tapRoom(target: RoomTarget) {
     if (target === 'weather') {
-      void enableWeather().catch((error: Error) => setLine({ title: '날씨를 못 봤어요.', body: error.message }))
+      speakWeather()
       return
     }
     if (target !== 'assistant') return setView(target)
     setHops((count) => count + 1)
     setPokes((count) => count + 1)
     setLine(pokeLine(settings, pokes))
+  }
+
+  function speakWeather() {
+    void enableWeather().catch((error: Error) =>
+      setLine({ title: '날씨를 못 봤어요.', body: error.message }),
+    )
   }
 
   async function enableWeather() {
@@ -213,16 +229,34 @@ function App() {
   return (
     <main className="app">
       <section className="stage">
-        <div className="speech" aria-live="polite">
-          <h1>{spoken.title}</h1>
-          <p>{spoken.body}</p>
+        <div className="speech">
+          <button className="weather" type="button" onClick={speakWeather}>
+            {weather ? weatherSummary(weather) : '날씨 켜기'}
+          </button>
+          <div aria-live="polite">
+            <h1>{spoken.title}</h1>
+            <p>{spoken.body}</p>
+          </div>
         </div>
+        <button
+          className="gear"
+          type="button"
+          aria-label="설정"
+          aria-haspopup="dialog"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3.2" />
+            <path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 00-2.6-1.5L14 2.5h-4L9.6 5a7.6 7.6 0 00-2.6 1.500l-2.4-1-2 3.4 2 1.600a7.6 7.6 0 000 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 002.6 1.500l.4 2.500h4l.4-2.500a7.6 7.6 0 002.6-1.500l2.4 1 2-3.400z" />
+          </svg>
+        </button>
         <Room scene={scene} sky={weather?.sky ?? 'cloud'} hops={hops} cheers={cheers} onTap={tapRoom} />
       </section>
 
       <section className="panel">
         <form className="prompt" onSubmit={submit}>
           <input
+            ref={promptInput}
             aria-label="비서에게 맡길 일"
             autoComplete="off"
             enterKeyHint="send"
@@ -294,9 +328,7 @@ function App() {
             records={records}
             sync={sync}
             open={settingsOpen}
-            onToggle={setSettingsOpen}
-            weatherOn={weather !== null}
-            onEnableWeather={enableWeather}
+            onClose={closeSettings}
           />
         </footer>
       </section>
