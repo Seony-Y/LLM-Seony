@@ -1,266 +1,271 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
+import { parseInput } from '../features/assistant/parseInput'
+import { diaryBody, greeting, localDate, pokeLine, sceneFor, type Line } from '../features/assistant/speech'
+import { composeMessage, dial } from '../features/device/deviceActions'
+import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
 import {
-  executeDeviceCommand,
-  parseDeviceCommand,
-} from '../features/device/deviceActions'
-import {
-  getCurrentWeather,
-  openWebSearch,
-  type CurrentWeather,
-} from '../features/online/onlineServices'
-import {
-  createSchedule,
-  deleteSchedule,
-  loadSchedules,
-  type ScheduleItem,
-} from '../features/schedule/scheduleService'
+  getTodayWeather,
+  hasWeatherPermission,
+  requestWeatherPermission,
+  type TodayWeather,
+} from '../features/online/weather'
+import { saveRecord } from '../features/records/recordStore'
+import { useRecords } from '../features/records/useRecords'
+import { useSync } from '../features/records/useSync'
+import { Room } from '../features/room/Room'
+import type { RoomTarget } from '../features/room/diorama'
+import { ConfirmCard, type Draft } from './ConfirmCard'
+import { RecordList, type View } from './RecordList'
+import { Settings } from './Settings'
 import './app.css'
 
-const features = [
-  ['Notes', 'Local-first'],
-  ['Camera', 'Device'],
-  ['Messages', 'Device'],
-  ['Calls', 'Device'],
-  ['Reminders', 'Ready'],
-  ['Calendar', 'Local'],
-  ['Weather', 'Live'],
-  ['Search', 'Web'],
-  ['Assistant', 'On-device'],
-] as const
+const MINUTE = 60_000
+const WEATHER_MINUTES = 60
+
+const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
+  {
+    view: 'event',
+    label: '일정',
+    icon: <><rect x="4" y="5" width="16" height="15" rx="4" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
+  },
+  {
+    view: 'todo',
+    label: '할 일',
+    icon: <><circle cx="12" cy="12" r="8.5" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
+  },
+  {
+    view: 'diary',
+    label: '비서 일기',
+    icon: <path d="M6 4h11a2 2 0 012 2v14H8a3 3 0 01-3-3V5M5 17a3 3 0 013-3h11" />,
+  },
+  {
+    view: 'note',
+    label: '기억',
+    icon: <path d="M12 20V10M12 12C7 12 5 9 5 5c5 0 7 3 7 7zM12 14c4 0 7-2 7-6-4 0-7 2-7 6z" />,
+  },
+]
 
 function App() {
+  const records = useRecords()
+  const sync = useSync(records.pending)
+  const now = useNow()
+  const [weather, setWeather] = useState<TodayWeather | null>(null)
+  const [view, setView] = useState<View>('event')
   const [prompt, setPrompt] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [schedules, setSchedules] = useState(loadSchedules)
-  const [scheduleMessage, setScheduleMessage] = useState('')
-  const [isSavingSchedule, setIsSavingSchedule] = useState(false)
-  const [weather, setWeather] = useState<CurrentWeather | null>(null)
-  const [weatherMessage, setWeatherMessage] = useState('')
-  const [isLoadingWeather, setIsLoadingWeather] = useState(false)
-  const [searchMessage, setSearchMessage] = useState('')
+  const [draft, setDraft] = useState<{ id: number; value: Draft } | null>(null)
+  const [line, setLine] = useState<Line | null>(null)
+  const [pokes, setPokes] = useState(0)
+  const [hops, setHops] = useState(0)
+  const [thinking, setThinking] = useState(false)
 
-  async function submitPrompt(event: React.FormEvent<HTMLFormElement>) {
+  const { loaded, settings, events, todos, diaries } = records
+  const state = useMemo(
+    () => ({ now, settings, events, todos, weather }),
+    [now, settings, events, todos, weather],
+  )
+  const scene = sceneFor(state)
+  const spoken = line ?? greeting(state)
+
+  useEffect(() => {
+    document.documentElement.dataset.scene = scene
+  }, [scene])
+
+  useEffect(() => {
+    const load = async () => {
+      if (await hasWeatherPermission()) setWeather(await getTodayWeather())
+    }
+    const run = () => void load().catch(console.error)
+    run()
+    const timer = setInterval(run, WEATHER_MINUTES * MINUTE)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (loaded) void applyNotifications(state).catch(console.error)
+    // 시간이 흐르는 것만으로는 예약을 다시 하지 않는다.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, settings, events, todos])
+
+  useEffect(() => {
+    if (!loaded || now.getHours() < 21) return
+    const date = localDate(now)
+    const body = diaryBody(state)
+    const written = diaries.find((diary) => diary.data.date === date)
+    if (written?.data.body !== body) {
+      void saveRecord('diary', { date, body }, `diary-${date}`).catch(console.error)
+    }
+  }, [loaded, now, state, diaries])
+
+  async function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!prompt.trim() || isLoading) return
-
     const input = prompt.trim()
-    setIsLoading(true)
-    setAnswer('')
-    try {
-      const deviceCommand = parseDeviceCommand(input)
-      setAnswer(
-        deviceCommand
-          ? await executeDeviceCommand(deviceCommand)
-          : await requestAssistant(input),
-      )
-    } catch (error) {
-      setAnswer(error instanceof Error ? error.message : 'Request failed')
-    } finally {
-      setIsLoading(false)
+    if (!input || thinking) return
+    const parsed = parseInput(input)
+    setPrompt('')
+    if (parsed.type !== 'question') {
+      setDraft({ id: Date.now(), value: parsed })
+      setLine({ title: '이렇게 이해했어요.', body: '틀린 데가 있으면 고쳐도 돼요.' })
+      return
     }
-  }
 
-  async function submitSchedule(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-
-    setIsSavingSchedule(true)
-    setScheduleMessage('')
+    setDraft(null)
+    setThinking(true)
+    setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
     try {
-      await createSchedule({
-        title: String(data.get('title') ?? ''),
-        note: String(data.get('note') ?? ''),
-        startsAt: String(data.get('startsAt') ?? ''),
-        withNotification: data.get('withNotification') === 'on',
+      setLine({ title: input, body: await requestAssistant(input) })
+    } catch (error) {
+      setLine({
+        title: '잘 모르겠어요.',
+        body: error instanceof Error ? error.message : '다시 물어봐 주세요.',
       })
-      setSchedules(loadSchedules())
-      setScheduleMessage('일정이 등록되었습니다.')
-      form.reset()
-    } catch (error) {
-      setScheduleMessage(error instanceof Error ? error.message : '일정을 등록하지 못했습니다.')
     } finally {
-      setIsSavingSchedule(false)
+      setThinking(false)
     }
   }
 
-  async function removeSchedule(item: ScheduleItem) {
-    try {
-      await deleteSchedule(item)
-      setSchedules(loadSchedules())
-      setScheduleMessage('일정이 삭제되었습니다.')
-    } catch (error) {
-      setScheduleMessage(error instanceof Error ? error.message : '일정을 삭제하지 못했습니다.')
+  async function confirm(value: Draft) {
+    switch (value.type) {
+      case 'message':
+        await composeMessage(value.recipient, value.message)
+        break
+      case 'call':
+        await dial(value.recipient)
+        break
+      case 'event': {
+        const { title, startsAt } = value
+        await requestNotificationPermission()
+        await saveRecord('event', { title, note: '', startsAt: startsAt.toISOString(), remind: true })
+        setView('event')
+        break
+      }
+      case 'todo':
+        await saveRecord('todo', { title: value.title, doneAt: null })
+        setView('todo')
+        break
+      case 'note':
+        await saveRecord('note', { body: value.body })
+        setView('note')
     }
+    setDraft(null)
+    setHops((count) => count + 1)
+    setLine(
+      value.type === 'message' || value.type === 'call'
+        ? { title: '여기까지예요.', body: '마지막은 직접 눌러주세요.' }
+        : { title: '챙겨뒀어요.', body: `잊어버려도 괜찮아요, ${settings.userName}.` },
+    )
   }
 
-  async function loadWeather() {
-    setIsLoadingWeather(true)
-    setWeatherMessage('')
-    try {
-      setWeather(await getCurrentWeather())
-    } catch (error) {
-      setWeather(null)
-      setWeatherMessage(error instanceof Error ? error.message : '날씨를 불러오지 못했습니다.')
-    } finally {
-      setIsLoadingWeather(false)
-    }
+  function tapRoom(target: RoomTarget) {
+    if (target !== 'assistant') return setView(target)
+    setHops((count) => count + 1)
+    setPokes((count) => count + 1)
+    setLine(pokeLine(settings, pokes))
   }
 
-  async function submitSearch(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const query = String(new FormData(event.currentTarget).get('query') ?? '')
-    setSearchMessage('')
-    try {
-      await openWebSearch(query)
-    } catch (error) {
-      setSearchMessage(error instanceof Error ? error.message : '검색을 열지 못했습니다.')
-    }
+  async function enableWeather() {
+    await requestWeatherPermission()
+    setWeather(await getTodayWeather())
+    setLine(null)
   }
 
   return (
-    <main className="shell">
-      <header>
-        <p className="eyebrow">PERSONAL ASSISTANT</p>
-        <h1>Today</h1>
-        <p className="date">Your private, local-first command center.</p>
-      </header>
-
-      <section className="feature-grid" aria-label="Feature status">
-        {features.map(([name, status]) => (
-          <article className="feature" key={name}>
-            <strong>{name}</strong>
-            <span>{status}</span>
-          </article>
-        ))}
+    <main className="app">
+      <section className="stage">
+        <div className="speech" aria-live="polite">
+          <h1>{spoken.title}</h1>
+          <p>{spoken.body}</p>
+        </div>
+        <Room scene={scene} hops={hops} onTap={tapRoom} />
       </section>
 
-      <section className="schedule-section" aria-labelledby="schedule-heading">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">SCHEDULE</p>
-            <h2 id="schedule-heading">일정과 알림</h2>
-          </div>
-          <span className="schedule-count">{schedules.length}개</span>
-        </div>
-
-        <form className="schedule-form" onSubmit={submitSchedule}>
-          <label>
-            일정 제목
-            <input name="title" placeholder="예: 병원 예약" required />
-          </label>
-          <label>
-            날짜와 시간
-            <input name="startsAt" type="datetime-local" required />
-          </label>
-          <label className="schedule-note">
-            메모
-            <input name="note" placeholder="장소나 준비할 내용" />
-          </label>
-          <label className="notification-toggle">
-            <input name="withNotification" type="checkbox" defaultChecked />
-            해당 시간에 휴대폰 알림 받기
-          </label>
-          <button type="submit" disabled={isSavingSchedule}>
-            {isSavingSchedule ? '등록 중...' : '일정 등록'}
+      <section className="panel">
+        <form className="prompt" onSubmit={submit}>
+          <input
+            aria-label="비서에게 맡길 일"
+            autoComplete="off"
+            enterKeyHint="send"
+            maxLength={2000}
+            placeholder={`${settings.assistantName}에게 슬쩍 말해보세요`}
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+          <button type="submit" aria-label="맡기기" disabled={thinking}>
+            <svg width="22" height="22" viewBox="0 0 24 24">
+              <path d="M12 19V5M6 11l6-6 6 6" />
+            </svg>
           </button>
         </form>
 
-        {scheduleMessage && (
-          <p className="schedule-message" role="status">{scheduleMessage}</p>
+        {draft && (
+          <ConfirmCard
+            key={draft.id}
+            draft={draft.value}
+            onConfirm={confirm}
+            onCancel={() => {
+              setDraft(null)
+              setLine({ title: '알겠어요.', body: '못 들은 걸로 할게요.' })
+            }}
+          />
         )}
 
-        <div className="schedule-list">
-          {schedules.length === 0 ? (
-            <p className="empty-state">등록된 일정이 없습니다.</p>
-          ) : (
-            schedules.map((item) => (
-              <article className="schedule-item" key={item.id}>
-                <time dateTime={item.startsAt}>{formatScheduleDate(item.startsAt)}</time>
-                <div>
-                  <strong>{item.title}</strong>
-                  {item.note && <p>{item.note}</p>}
-                  <span>{item.notificationId ? '알림 예약됨' : '알림 없음'}</span>
-                </div>
-                <button className="delete-button" type="button" onClick={() => removeSchedule(item)}>
-                  삭제
-                </button>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
+        <nav aria-label="기록">
+          {VIEWS.map((item) => (
+            <button
+              key={item.view}
+              type="button"
+              aria-pressed={view === item.view}
+              onClick={() => setView(item.view)}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24">
+                {item.icon}
+              </svg>
+              {item.label}
+            </button>
+          ))}
+        </nav>
 
-      <section className="live-section" aria-labelledby="live-heading">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">LIVE</p>
-            <h2 id="live-heading">날씨와 웹 검색</h2>
-          </div>
-          <span className="online-badge">인터넷 필요</span>
-        </div>
-
-        <div className="live-tools">
-          <div className="weather-tool">
-            <div className="tool-heading">
-              <strong>현재 위치 날씨</strong>
-              <button type="button" onClick={loadWeather} disabled={isLoadingWeather}>
-                {isLoadingWeather ? '확인 중...' : '날씨 확인'}
-              </button>
-            </div>
-            {weather && (
-              <div className="weather-result">
-                <p><strong>{weather.temperature}°</strong> {weather.description}</p>
-                <dl>
-                  <div><dt>체감</dt><dd>{weather.apparentTemperature}°</dd></div>
-                  <div><dt>습도</dt><dd>{weather.humidity}%</dd></div>
-                  <div><dt>바람</dt><dd>{weather.windSpeed} km/h</dd></div>
-                </dl>
-              </div>
-            )}
-            {weatherMessage && <p className="tool-message" role="status">{weatherMessage}</p>}
-          </div>
-
-          <form className="search-tool" onSubmit={submitSearch}>
-            <label htmlFor="web-query">실시간 웹 검색</label>
-            <div className="prompt-row">
-              <input id="web-query" name="query" placeholder="검색할 내용을 입력하세요" />
-              <button type="submit">검색</button>
-            </div>
-            {searchMessage && <p className="tool-message" role="status">{searchMessage}</p>}
-          </form>
-        </div>
-      </section>
-
-      <form className="assistant" onSubmit={submitPrompt}>
-        <label htmlFor="prompt">Ask your assistant</label>
-        <div className="prompt-row">
-          <input
-            id="prompt"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="카메라 켜줘, 엄마한테 전화 걸어줘"
+        <div>
+          <RecordList
+            view={view}
+            records={records}
+            now={now}
+            onDone={() => {
+              setHops((count) => count + 1)
+              setLine({ title: '하나 끝!', body: '오늘 일기에 적어둘게요.' })
+            }}
           />
-          <button type="submit" disabled={isLoading}>
-            {isLoading ? 'Thinking...' : 'Send'}
-          </button>
         </div>
-        {answer && <output>{answer}</output>}
-      </form>
+
+        <footer>
+          <p role={sync.error ? 'alert' : undefined}>{sync.error || saveStatus(sync, records.pending)}</p>
+          <Settings records={records} sync={sync} onEnableWeather={enableWeather} />
+        </footer>
+      </section>
     </main>
   )
 }
 
-function formatScheduleDate(value: string) {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'short',
-    day: 'numeric',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
+function saveStatus(sync: ReturnType<typeof useSync>, pending: number) {
+  if (!sync.connected) return '이 기기에만 저장돼요'
+  if (pending) return `기기에 저장됨, 서버로 보낼 것 ${pending}개`
+  if (!sync.lastSyncedAt) return '서버와 맞추는 중이에요'
+  const time = new Intl.DateTimeFormat('ko-KR', { timeStyle: 'short' })
+  return `서버까지 저장됨, ${time.format(new Date(sync.lastSyncedAt))}`
+}
+
+function useNow() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const tick = () => setNow(new Date())
+    const timer = setInterval(tick, MINUTE)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [])
+  return now
 }
 
 export default App

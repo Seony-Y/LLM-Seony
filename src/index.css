@@ -1,26 +1,124 @@
 :root {
-  color: #273230;
-  background: #f2f3ed;
-  font: 16px/1.5 'Trebuchet MS', sans-serif;
+  --sky-top: #d3e9e6;
+  --sky-bottom: #f8ecd2;
+  --ink: #38363d;
+  --soft: #5d5a64;
+  --panel: #fffffff5;
+  --field: #f3f2f5;
+  --line: #e6e4ea;
+  --panel-ink: #38363d;
+  --panel-soft: #6b6873;
+  --action: #45424d;
+  --on-action: #fff;
+  --edge: #e3dfe6;
+  --hand: 'Hi Melody', cursive;
+  color-scheme: light;
+  font: 16px/1.6 'Gowun Dodum', sans-serif;
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
+}
+
+:root[data-scene='rain'] {
+  --sky-top: #a8c0c8;
+  --sky-bottom: #dde6df;
+  --ink: #2b3340;
+  --soft: #3f4957;
+  --field: #eff1f5;
+  --line: #e0e4ea;
+  --panel-ink: #2f3744;
+  --panel-soft: #616a77;
+  --action: #48566a;
+  --edge: #d5dbe3;
+}
+
+:root[data-scene='busy'] {
+  --sky-top: #f6cfaa;
+  --sky-bottom: #fbebc4;
+  --ink: #49352f;
+  --soft: #664f47;
+  --field: #f9f0ea;
+  --line: #efe2da;
+  --panel-ink: #46352f;
+  --panel-soft: #79645b;
+  --action: #a3553f;
+  --edge: #ecd9cd;
+}
+
+:root[data-scene='night'] {
+  --sky-top: #232549;
+  --sky-bottom: #5d5488;
+  --ink: #f7f3fb;
+  --soft: #d8d1e8;
+  --panel: #302f58f5;
+  --field: #3f3d6c;
+  --line: #4a4778;
+  --panel-ink: #f4f0fa;
+  --panel-soft: #c9c1de;
+  --action: #f3c878;
+  --on-action: #3b2f3d;
+  --edge: #262548;
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
-  min-width: 320px;
-  min-height: 100vh;
   margin: 0;
-  background:
-    linear-gradient(rgba(30, 77, 72, 0.05) 1px, transparent 1px),
-    #f2f3ed;
-  background-size: 100% 32px;
+  padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom)
+    max(16px, env(safe-area-inset-left));
+  color: var(--ink);
+  background: linear-gradient(170deg, var(--sky-top), var(--sky-bottom)) fixed;
+  word-break: keep-all;
 }
 
 button,
-input {
-  letter-spacing: 0;
+input,
+select {
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+p,
+ul {
+  margin: 0;
+  padding: 0;
+  font-weight: 400;
+}
+
+ul {
+  list-style: none;
+}
+
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }

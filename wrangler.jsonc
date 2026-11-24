@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "assistant",
+  "main": "server/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "assistant",
+      "migrations_dir": "server/migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "BACKUPS" }],
+  // 매일 한국 시각 새벽 3시에 백업한다.
+  "triggers": { "crons": ["0 18 * * *"] }
+}

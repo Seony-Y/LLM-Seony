@@ -55,3 +55,7 @@ android/llama.cpp/examples/llama.android/build.gradle.kts
 android/llama.cpp/examples/llama.android/settings.gradle.kts
 android/llama.cpp/examples/llama.android/lib/.cxx/
 android/llama.cpp/examples/llama.android/lib/build/
+
+# Wrangler 로컬 상태와 비밀 값
+.wrangler/
+.dev.vars*
