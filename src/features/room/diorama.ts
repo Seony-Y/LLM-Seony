@@ -1,11 +1,15 @@
 import * as THREE from 'three'
 import type { Scene } from '../assistant/speech'
+import type { Sky } from '../online/weather'
+import { createBurst, heartGeometry } from './burst'
 
-export type RoomTarget = 'assistant' | 'diary' | 'event' | 'note'
+export type RoomTarget = 'assistant' | 'diary' | 'event' | 'note' | 'todo' | 'weather'
 
 export interface Diorama {
   setScene(scene: Scene): void
+  setSky(sky: Sky): void
   hop(): void
+  celebrate(): void
   dispose(): void
 }
 
@@ -19,7 +23,10 @@ const LIGHT: Record<Scene, { color: string; sun: number; sky: number; exposure: 
 }
 
 const RAIN_COUNT = 130
-const HOP_SECONDS = 0.6
+const SECONDS = { assistant: 0.6, books: 0.9, calendar: 1.1, plant: 0.8, checklist: 1.4, sky: 0.8 }
+const CONFETTI = ['#e98a6c', '#f2b36f', '#8fb3bd', '#bfdc8c', '#f0a39a']
+
+type Effect = keyof typeof SECONDS
 
 function material(color: string, roughness = 0.6, options: THREE.MeshPhysicalMaterialParameters = {}) {
   return new THREE.MeshPhysicalMaterial({ color, roughness, envMapIntensity: 0.42, ...options })
@@ -103,7 +110,7 @@ function buildIsland(parent: THREE.Object3D) {
   for (const [color, radius] of [['#e9a08c', 1], ['#8fb3bd', 0.72]] as const) {
     mesh(new THREE.TorusGeometry(radius, 0.025, 12, 90), material(color, 0.9), [0, 0.2, 0], parent).rotation.x = Math.PI / 2
   }
-  const flowers = [[-1.9, 0.1], [1.95, 0.1], [0.4, -1.75], [-0.45, 1.7], [0.75, 1.55]]
+  const flowers = [[-1.9, 0.1], [1.95, 0.1], [0.4, -1.75], [-0.45, 1.7], [-1.2, -1.45]]
   flowers.forEach(([x, z], index) => {
     mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), material('#b5a89c'), [x, 0.2, z], parent)
     mesh(sphere(0.05), material(index % 2 ? '#fff3df' : '#f1b3a4', 0.8), [x, 0.3, z], parent)
@@ -186,21 +193,22 @@ function buildAssistant(parent: THREE.Object3D) {
 function buildProps(parent: THREE.Object3D) {
   const books = group([-1.35, 0.14, 0.75], parent)
   const covers = [['#6f86b8', 0.82, 0.1], ['#e2ab6b', 0.74, -0.16], ['#c9756a', 0.66, 0.12]] as const
-  covers.forEach(([color, width, turn], index) => {
+  const bookStack = covers.map(([color, width, turn], index) => {
     const book = group([0, 0.09 + index * 0.17, 0], books)
     book.rotation.y = turn
     mesh(roundedBox(width, 0.55, 0.15, 0.04), material(color, 0.7), [0, 0, 0], book).rotation.x = Math.PI / 2
     mesh(roundedBox(width - 0.05, 0.1, 0.5, 0.02), material('#fbf3e4', 0.9), [0.06, 0, 0.01], book)
+    return book
   })
 
   const calendar = group([1.35, 0.62, -0.55], parent)
   calendar.rotation.y = -0.45
   mesh(roundedBox(0.95, 0.85, 0.1, 0.1), material('#fbf6ee', 0.8), [0, 0, 0], calendar)
   mesh(roundedBox(0.95, 0.22, 0.13, 0.07), material('#e08a72', 0.7), [0, 0.33, 0.01], calendar)
-  for (let index = 0; index < 12; index += 1) {
+  const dots = Array.from({ length: 12 }, (_, index) => {
     const dot: Point = [-0.3 + (index % 4) * 0.2, 0.1 - Math.floor(index / 4) * 0.19, 0.06]
-    mesh(sphere(0.045), material(index === 6 ? '#e08a72' : '#b9cdd0', 0.7), dot, calendar).scale.z = 0.4
-  }
+    return mesh(sphere(0.045), material(index === 6 ? '#e08a72' : '#b9cdd0', 0.7), dot, calendar)
+  })
   for (const x of [-0.28, 0.28]) {
     mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.6, 12), material('#a97958'), [x, -0.3, -0.12], calendar).rotation.x = 0.3
   }
@@ -222,12 +230,72 @@ function buildProps(parent: THREE.Object3D) {
     mesh(new THREE.IcosahedronGeometry(radius, 3), material('#9db0a6', 0.9), [x, y, z], plant)
   }
 
-  const cloud = group([-1.5, 2.35, -1], parent)
+  const flower = group([0.02, 0.74, 0.1], plant)
+  flower.rotation.x = -0.3
+  for (let index = 0; index < 5; index += 1) {
+    const angle = (index / 5) * Math.PI * 2
+    const petal = mesh(sphere(0.085), material('#f3a7a0', 0.7), [Math.cos(angle) * 0.1, Math.sin(angle) * 0.1, 0], flower)
+    petal.scale.z = 0.45
+  }
+  mesh(sphere(0.065), material('#f6cf74', 0.7), [0, 0, 0.03], flower)
+
+  const checklist = group([0.74, 0.5, 1.42], parent)
+  checklist.rotation.set(-0.28, 0.12, 0)
+  mesh(roundedBox(0.56, 0.7, 0.08, 0.06), material('#c98f6b', 0.75), [0, 0, 0], checklist)
+  mesh(roundedBox(0.44, 0.54, 0.07, 0.03), material('#fffaf2', 0.9), [0, -0.03, 0.02], checklist)
+  mesh(roundedBox(0.2, 0.1, 0.1, 0.03), material('#8fb3bd', 0.5), [0, 0.33, 0.03], checklist)
+  const checks = [0.13, -0.03, -0.19].map((y) => {
+    mesh(sphere(0.05), material('#e3ddd6', 0.9), [-0.14, y, 0.06], checklist).scale.z = 0.3
+    mesh(roundedBox(0.22, 0.04, 0.065, 0.015), material('#d8d1ca', 0.9), [0.06, y, 0.04], checklist)
+    return mesh(sphere(0.058), material('#7fb069', 0.6), [-0.14, y, 0.07], checklist)
+  })
+
+  const sky = group([-1.5, 2.35, -1], parent)
+  const skies = {
+    cloud: group([0, 0, 0], sky),
+    sun: group([0, 0, 0], sky),
+    moon: group([0, 0, 0], sky),
+    snow: group([0, 0, 0], sky),
+    rain: group([0, 0, 0], sky),
+  }
+
   const cloudSurface = material('#ffffff', 1)
   for (const [x, y, radius] of [[0, 0, 0.3], [0.33, -0.05, 0.23], [-0.32, -0.06, 0.22], [0.1, 0.17, 0.22]]) {
-    mesh(sphere(radius), cloudSurface, [x, y, 0], cloud)
+    mesh(sphere(radius), cloudSurface, [x, y, 0], skies.cloud)
   }
-  return { books, calendar, lamp, shade, glow, plant, cloud, cloudSurface }
+
+  const sunSurface = material('#f7bd4f', 0.55)
+  mesh(sphere(0.3), sunSurface, [0, 0, 0], skies.sun)
+  for (let index = 0; index < 8; index += 1) {
+    const angle = (index / 8) * Math.PI * 2
+    const ray = mesh(new THREE.CapsuleGeometry(0.05, 0.12, 6, 14), sunSurface, [Math.cos(angle) * 0.46, Math.sin(angle) * 0.46, 0], skies.sun)
+    ray.rotation.z = angle - Math.PI / 2
+  }
+
+  const moonShape = new THREE.Shape()
+  moonShape.absarc(0, 0, 0.34, Math.PI * 0.35, Math.PI * 1.65, false)
+  moonShape.absarc(0.2, 0, 0.306, Math.PI * 1.45, Math.PI * 0.55, true)
+  const moon = new THREE.ExtrudeGeometry(moonShape, { depth: 0.08, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.05, bevelSegments: 6, curveSegments: 32 })
+  mesh(moon, material('#f6e3a1', 0.6, { emissive: new THREE.Color('#e8c766'), emissiveIntensity: 0.45 }), [0, 0, 0], skies.moon).rotation.z = 0.4
+
+  const snowSurface = material('#a9cdec', 0.5)
+  for (let index = 0; index < 6; index += 1) {
+    const arm = group([0, 0, 0], skies.snow)
+    arm.rotation.z = (index / 6) * Math.PI * 2
+    mesh(new THREE.CapsuleGeometry(0.045, 0.36, 6, 14), snowSurface, [0, 0.22, 0], arm)
+    for (const side of [-1, 1]) {
+      const twig = mesh(new THREE.CapsuleGeometry(0.038, 0.1, 6, 12), snowSurface, [side * 0.075, 0.32, 0], arm)
+      twig.rotation.z = -side * 0.85
+    }
+  }
+
+  const umbrella = new THREE.SphereGeometry(0.46, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.42)
+  mesh(umbrella, material('#7fa6c9', 0.6, { side: THREE.DoubleSide }), [0, 0, 0], skies.rain)
+  mesh(sphere(0.045), material('#f6e9dc'), [0, 0.48, 0], skies.rain)
+  mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.72, 12), material('#f6e9dc'), [0, 0.08, 0], skies.rain)
+  mesh(new THREE.TorusGeometry(0.08, 0.025, 10, 24, Math.PI), material('#f6e9dc'), [0.08, -0.28, 0], skies.rain).rotation.z = Math.PI
+
+  return { books, bookStack, calendar, dots, lamp, shade, glow, plant, flower, checklist, checks, sky, skies }
 }
 
 export function createDiorama(
@@ -276,7 +344,7 @@ export function createDiorama(
   )
   world.add(stars)
 
-  const sky = new THREE.HemisphereLight('#fff', '#b9a894', 1)
+  const skyLight = new THREE.HemisphereLight('#fff', '#b9a894', 1)
   const sun = new THREE.DirectionalLight('#fff', 2)
   sun.position.set(-3, 6, 4)
   sun.castShadow = true
@@ -286,19 +354,93 @@ export function createDiorama(
   Object.assign(sun.shadow.camera, { left: -3.5, right: 3.5, top: 4, bottom: -3 })
   const rim = new THREE.DirectionalLight('#ffe0c8', 1.1)
   rim.position.set(3, 3, -4)
-  world.add(sky, sun, rim)
+  world.add(skyLight, sun, rim)
 
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches
   const pointer = { x: 0, y: 0 }
   let scene: Scene = 'morning'
+  let sky: Sky = 'cloud'
   let lampOn = false
-  let hopStartedAt = -Infinity
+  let blooming = false
+  let flowerScale = 0
+  let renderedAt = performance.now()
+  const startedAt: Partial<Record<Effect, number>> = {}
+
+  const hearts = createBurst(heartGeometry(0.07), 24, island)
+  const confetti = createBurst(new THREE.PlaneGeometry(0.1, 0.07), 80, island)
+  const papers = createBurst(new THREE.PlaneGeometry(0.2, 0.26), 12, island)
+
+  /** 진행 중이면 0~1, 아니면 null. */
+  function progress(effect: Effect) {
+    const started = startedAt[effect]
+    if (started === undefined) return null
+    const value = (performance.now() - started) / 1000 / SECONDS[effect]
+    return value < 1 ? value : null
+  }
+
+  function play(effect: Effect) {
+    if (effect === 'plant') blooming = !blooming
+    if (still) {
+      flowerScale = blooming ? 1 : 0
+      render()
+      return
+    }
+    startedAt[effect] = performance.now()
+    if (effect === 'assistant') {
+      hearts.emit({ origin: new THREE.Vector3(0, 1.5, 0.5), colors: ['#ee8f88', '#f6b4a8'], count: 5, rise: 1.1, spread: 0.5, gravity: 0.5, seconds: 1.4 })
+    } else if (effect === 'books') {
+      papers.emit({ origin: new THREE.Vector3(-1.35, 0.8, 0.8), colors: ['#fffaf0', '#fbf0dd'], count: 4, rise: 1.5, spread: 0.5, gravity: 1.2, seconds: 1.8 })
+    } else if (effect === 'plant' && blooming) {
+      confetti.emit({ origin: new THREE.Vector3(1.42, 1, 0.9), colors: ['#f3a7a0', '#f6cf74'], count: 10, rise: 1, spread: 0.5, gravity: 1.6, seconds: 1.1 })
+    }
+  }
+
+  function celebrate() {
+    if (still) return
+    for (const x of [-0.9, 0.9]) {
+      confetti.emit({ origin: new THREE.Vector3(x, 0.8, 0.9), colors: CONFETTI, count: 32, rise: 3.2, spread: 1.1, gravity: 3, seconds: 2 })
+    }
+  }
+
+  function animateEffects(elapsed: number) {
+    const books = progress('books')
+    props.bookStack.forEach((book, index) => {
+      const lift = books === null ? 0 : Math.max(0, Math.sin(books * Math.PI * 1.4 - (2 - index) * 0.5))
+      book.position.y = 0.09 + index * 0.17 + lift * 0.1 * (index + 1)
+    })
+    const calendar = progress('calendar')
+    props.calendar.rotation.z = calendar === null ? 0 : Math.sin(calendar * Math.PI * 5) * 0.09 * (1 - calendar)
+    props.dots.forEach((dot, index) => {
+      const wave = calendar === null ? 0 : Math.max(0, Math.sin(calendar * Math.PI * 3 - index * 0.35))
+      dot.scale.set(1 + wave * 0.6, 1 + wave * 0.6, 0.4 + wave)
+    })
+    const checklist = progress('checklist')
+    props.checklist.rotation.z = checklist === null ? 0 : Math.sin(checklist * Math.PI * 4) * 0.06 * (1 - checklist)
+    props.checks.forEach((check, index) => {
+      // 쉴 때는 첫 줄만 찍혀 있다.
+      const resting = index === 0 ? 1 : 0.001
+      const pop = checklist === null ? 0 : Math.min(1, Math.max(0, checklist * 5 - index))
+      const scale = checklist === null ? resting : Math.max(pop + Math.sin(pop * Math.PI) * 0.5, 0.001)
+      check.scale.set(scale, scale, scale * 0.45)
+    })
+    const plant = progress('plant')
+    props.plant.rotation.z = plant === null ? 0 : Math.sin(plant * Math.PI * 5) * 0.12 * (1 - plant)
+    flowerScale += ((blooming ? 1 : 0) - flowerScale) * Math.min(1, elapsed * 9)
+    props.flower.scale.setScalar(Math.max(flowerScale, 0.001))
+
+    const pop = progress('sky')
+    props.sky.scale.setScalar(pop === null ? 1 : 1 + Math.sin(pop * Math.PI * 3) * 0.22 * (1 - pop))
+    for (const burst of [hearts, confetti, papers]) burst.update(elapsed)
+  }
 
   function render() {
     const time = still ? 1 : performance.now() / 1000
     const breath = Math.sin(time * 2) * 0.015
-    const hop = (performance.now() / 1000 - hopStartedAt) / HOP_SECONDS
-    const hopping = !still && hop > 0 && hop < 1
+    const hop = progress('assistant') ?? 0
+    const hopping = hop > 0
+    const elapsed = Math.min((performance.now() - renderedAt) / 1000, 0.05)
+    renderedAt = performance.now()
+    animateEffects(elapsed)
 
     island.position.y = Math.sin(time * 0.8) * 0.04 - 0.12
     island.rotation.y += (pointer.x * 0.22 - 0.12 - island.rotation.y) * 0.05
@@ -316,7 +458,10 @@ export function createDiorama(
     for (const eye of eyes.children) eye.scale.y = !still && time % 4 < 0.12 ? 0.12 : 1
     const droop = { morning: 0, rain: 0, busy: -0.35, night: 0.3 }[scene]
     sprout.rotation.z = Math.sin(time * 1.6) * 0.06 + droop
-    props.cloud.position.x = -1.5 + Math.sin(time * 0.25) * 0.35
+    props.sky.position.x = -1.5 + Math.sin(time * 0.25) * 0.35
+    props.skies.sun.rotation.z = time * 0.2
+    props.skies.snow.rotation.z = Math.sin(time * 0.6) * 0.4
+    props.skies.rain.rotation.z = -0.25 + Math.sin(time * 0.9) * 0.08
 
     if (rain.visible) {
       drops.forEach(([x, offset, z], index) => {
@@ -335,12 +480,25 @@ export function createDiorama(
     props.glow.intensity = on ? 9 : 0
   }
 
+  function showSky() {
+    // 밤에는 해 대신 달을 띄운다.
+    const shown = sky === 'sun' && scene === 'night' ? 'moon' : sky
+    for (const [name, object] of Object.entries(props.skies)) object.visible = name === shown
+  }
+
+  function setSky(next: Sky) {
+    if (next !== sky && !still) startedAt.sky = performance.now()
+    sky = next
+    showSky()
+    render()
+  }
+
   function setScene(next: Scene) {
     scene = next
     const light = LIGHT[next]
     sun.color.set(light.color)
     sun.intensity = light.sun
-    sky.intensity = light.sky
+    skyLight.intensity = light.sky
     renderer.toneMappingExposure = light.exposure
     world.traverse((object) => {
       if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshPhysicalMaterial) {
@@ -351,8 +509,8 @@ export function createDiorama(
     rain.visible = assistant.umbrella.visible = next === 'rain'
     assistant.sprout.visible = next !== 'rain'
     stars.visible = assistant.closedEyes.visible = next === 'night'
-    assistant.eyes.visible = props.cloud.visible = next !== 'night'
-    props.cloudSurface.color.set(next === 'rain' ? '#b8c4cf' : '#fff')
+    assistant.eyes.visible = next !== 'night'
+    showSky()
     render()
   }
 
@@ -376,12 +534,14 @@ export function createDiorama(
     pointer.y = (event.clientY / innerHeight) * 2 - 1
   }
 
-  const targets: [THREE.Object3D, RoomTarget | 'lamp'][] = [
-    [assistant.root, 'assistant'],
-    [props.books, 'diary'],
-    [props.calendar, 'event'],
-    [props.plant, 'note'],
-    [props.lamp, 'lamp'],
+  const targets: { object: THREE.Object3D; effect: Effect | 'lamp'; target?: RoomTarget }[] = [
+    { object: assistant.root, effect: 'assistant', target: 'assistant' },
+    { object: props.books, effect: 'books', target: 'diary' },
+    { object: props.calendar, effect: 'calendar', target: 'event' },
+    { object: props.plant, effect: 'plant', target: 'note' },
+    { object: props.checklist, effect: 'checklist', target: 'todo' },
+    { object: props.sky, effect: 'sky', target: 'weather' },
+    { object: props.lamp, effect: 'lamp' },
   ]
   const raycaster = new THREE.Raycaster()
 
@@ -392,15 +552,20 @@ export function createDiorama(
       1 - ((event.clientY - bounds.top) / bounds.height) * 2,
     )
     raycaster.setFromCamera(point, camera)
-    const hits = targets.flatMap(([object, target]) => {
-      const [hit] = raycaster.intersectObject(object, true)
-      return hit ? [{ distance: hit.distance, target }] : []
+    const hits = targets.flatMap((item) => {
+      const [hit] = item.object.visible ? raycaster.intersectObject(item.object, true) : []
+      return hit ? [{ distance: hit.distance, item }] : []
     })
-    const nearest = hits.sort((left, right) => left.distance - right.distance)[0]
+    const nearest = hits.sort((left, right) => left.distance - right.distance)[0]?.item
     if (!nearest) return
-    if (nearest.target !== 'lamp') return onTap(nearest.target)
-    switchLamp(!lampOn)
-    render()
+    if (nearest.target) onTap(nearest.target)
+    if (nearest.effect === 'lamp') {
+      switchLamp(!lampOn)
+      render()
+    } else if (nearest.effect !== 'assistant') {
+      // 비서의 반응은 화면이 hop()으로 부른다.
+      play(nearest.effect)
+    }
   }
 
   canvas.addEventListener('click', tap)
@@ -412,9 +577,9 @@ export function createDiorama(
 
   return {
     setScene,
-    hop() {
-      hopStartedAt = performance.now() / 1000
-    },
+    setSky,
+    hop: () => play('assistant'),
+    celebrate,
     dispose() {
       renderer.setAnimationLoop(null)
       observer.disconnect()

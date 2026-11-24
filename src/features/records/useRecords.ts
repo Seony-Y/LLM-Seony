@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { importLegacySchedules, loadRecords, subscribeRecords } from './recordStore'
+import { importLegacySchedules, isPurged, loadRecords, subscribeRecords } from './recordStore'
 import { defaultSettings, SETTINGS_ID, type AssistantRecord, type Kind } from './types'
 
 const TRASH_DAYS = 30
@@ -45,7 +45,10 @@ export function useRecords() {
       notes: ofKind('note').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       diaries: ofKind('diary').sort((a, b) => b.data.date.localeCompare(a.data.date)),
       settings: { ...defaultSettings, ...saved?.data },
-      trash: all.filter(({ deletedAt }) => deletedAt && Date.parse(deletedAt) > oldest),
+      trash: all.filter(
+        (record) =>
+          record.deletedAt && Date.parse(record.deletedAt) > oldest && !isPurged(record),
+      ),
       pending: all.filter(({ dirty }) => dirty).length,
     }
   }, [records, loadedAt, error])

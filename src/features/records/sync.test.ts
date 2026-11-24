@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, expect, test } from 'vitest'
 import { importBackup } from './backup'
 import { database } from './db'
-import { loadRecords, saveRecord, setDeleted } from './recordStore'
+import { emptyTrash, loadRecords, saveRecord, setDeleted } from './recordStore'
 import { linkServer, syncRecords, type RemoteRecords, type RemoteRow } from './sync'
 import type { AssistantRecord } from './types'
 
@@ -110,6 +110,18 @@ test('삭제와 되살리기가 동기화된다', async () => {
   await setDeleted('a', false)
   await syncRecords(remote, 'me')
   expect(rows.get('a')?.deleted_at).toBeNull()
+})
+
+test('휴지통을 비우면 내용이 서버에서도 사라진다', async () => {
+  const { remote, rows } = fakeServer()
+  await saveRecord('todo', { title: '비밀', doneAt: null }, 'a')
+  await saveRecord('todo', { title: '남길 것', doneAt: null }, 'b')
+  await syncRecords(remote, 'me')
+  await setDeleted('a', true)
+  await emptyTrash()
+  await syncRecords(remote, 'me')
+  expect(rows.get('a')?.data).toEqual({ purged: true })
+  expect(rows.get('b')?.data).toMatchObject({ title: '남길 것' })
 })
 
 test('연결한 적 없는 서버에는 올리지 않는다', async () => {

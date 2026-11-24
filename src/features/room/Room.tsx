@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Scene } from '../assistant/speech'
+import type { Sky } from '../online/weather'
 import type { Diorama, RoomTarget } from './diorama'
 
 interface RoomProps {
   scene: Scene
+  sky: Sky
   hops: number
+  cheers: number
   onTap: (target: RoomTarget) => void
 }
 
-export function Room({ scene, hops, onTap }: RoomProps) {
+export function Room({ scene, sky, hops, cheers, onTap }: RoomProps) {
   const container = useRef<HTMLDivElement>(null)
   const tapHandler = useRef(onTap)
   const [diorama, setDiorama] = useState<Diorama | null>(null)
@@ -43,8 +46,16 @@ export function Room({ scene, hops, onTap }: RoomProps) {
   }, [diorama, scene])
 
   useEffect(() => {
+    diorama?.setSky(sky)
+  }, [diorama, sky])
+
+  useEffect(() => {
     if (hops) diorama?.hop()
   }, [diorama, hops])
+
+  useEffect(() => {
+    if (cheers) diorama?.celebrate()
+  }, [diorama, cheers])
 
   return (
     <>
