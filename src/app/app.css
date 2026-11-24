@@ -321,6 +321,30 @@
   border: 0;
 }
 
+.conversation-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.conversation-tools button {
+  min-height: 44px;
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.asked-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.asked-row .remove {
+  margin: 0;
+}
+
 .asked,
 .replied {
   max-width: 88%;
