@@ -61,6 +61,16 @@ export function Preferences({ settings, onSaved }: PreferencesProps) {
             onChange={(event) => edit({ userName: event.target.value })}
           />
         </label>
+        {Capacitor.isNativePlatform() && (
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={draft.briefing}
+              onChange={(event) => edit({ briefing: event.target.checked })}
+            />
+            매일 아침 {BRIEFING_HOUR}시에 보고 받기
+          </label>
+        )}
         <label>
           말투
           <select value={draft.tone} onChange={(event) => edit({ tone: event.target.value as Tone })}>
@@ -68,23 +78,11 @@ export function Preferences({ settings, onSaved }: PreferencesProps) {
             <option value="nag">잔소리꾼</option>
           </select>
         </label>
-      </div>
-      {Capacitor.isNativePlatform() && (
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={draft.briefing}
-            onChange={(event) => edit({ briefing: event.target.checked })}
-          />
-          매일 아침 {BRIEFING_HOUR}시에 보고 받기
-        </label>
-      )}
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
         <button className="primary" type="submit" disabled={busy}>
           저장
         </button>
       </div>
+      {error && <p role="alert">{error}</p>}
     </form>
   )
 }

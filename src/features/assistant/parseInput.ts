@@ -1,3 +1,5 @@
+import { isSmallTalk } from './answer'
+
 export type ParsedInput =
   | { type: 'event'; title: string; startsAt: Date }
   | { type: 'todo'; title: string }
@@ -6,6 +8,11 @@ export type ParsedInput =
   | { type: 'call'; recipient: string }
   | { type: 'question'; text: string }
 
+/** 물음표가 없어도 묻는 말. 시각이 들어 있어도 일정으로 보지 않는다. */
+const ASKING_ENDING =
+  /(?:뭐|뭘|무엇|어디|언제|누구|얼마|며칠|몇\s*[가-힣]{1,2})(?:이)?(?:야|지|더라|였지|였더라|예요|에요|니)$|(?:했|였|었|았|뒀|갔|샀|봤|놨)(?:지|더라|던가)$|(?:^|\s)(?:뭐|뭘|어디|언제|누구)\s.*(?:있어|있지|남았어|남았지|했어|갔어)$/
+/** 앱에게 시키는 말. */
+const REQUEST_ENDING = /(?:써|적어|읽어|보여|알려|찾아)\s*(?:줘|줄래|주라|봐)$/
 /** "감기", "전화기" 같은 이름씨와 섞이지 않게 움직씨만 적는다. */
 const TODO_ENDING =
   /(?:하|사|가|내|찾|들르|보내|먹|마시|챙기|읽|쓰|보|받|넣|빼|주|맡기|고치|바꾸|만들|치우|버리|끄|켜|걸|씻|닦|돌리|널|옮기|올리|정리하|준비하)기$|(?:예약|해야지?|할 것)$|야\s*(?:해|돼|함|됨)$/
@@ -34,8 +41,10 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
   )
   if (call) return { type: 'call', recipient: call[1].trim() }
 
+  if (isSmallTalk(text) || ASKING_ENDING.test(text)) return { type: 'question', text }
   const event = parseEvent(text, now)
   if (event) return event
+  if (REQUEST_ENDING.test(text)) return { type: 'question', text }
   if (text.endsWith('?')) return { type: 'question', text }
   if (TODO_ENDING.test(text)) {
     return { type: 'todo', title: text }

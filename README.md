@@ -13,7 +13,9 @@
 - 홈 화면 위젯 (Android)
 - 앱 설치 없이 화면만 자동 업데이트 (Android)
 - 다른 앱에서 공유한 글을 일정이나 기억으로 받기 (Android)
-- 온디바이스 AI 대화 (Android, 물음표로 끝나는 입력)
+- 묻는 말에 일정, 할 일, 기억에서 찾아 답하기
+- 일정과 관련된 기억을 30분 전에 미리 알리기 (Android)
+- 온디바이스 AI 대화 (Android, 모르는 질문에서 직접 고를 때만)
 
 ## Requirements
 
@@ -83,6 +85,7 @@ $env:JAVA_HOME=(Get-ChildItem 'C:\Program Files\Microsoft' -Directory -Filter 'j
 src/
   app/                     # 화면과 사용자 흐름
   features/assistant/      # 입력 해석, 비서의 말, 로컬 LLM 브리지
+  features/recall/         # 기억 찾기
   features/room/           # 3D 방 (Three.js)
   features/records/        # IndexedDB 저장, 동기화, 백업
   features/notify/         # 로컬 알림
