@@ -26,7 +26,7 @@ test('앞으로 있을, 알림을 켠 일정만 울린다', () => {
   expect(planned.map(({ title }) => title)).toEqual(['next'])
 })
 
-test('지난 8시를 빼고 7일 안의 아침 보고를 그날 일정으로 만든다', () => {
+test('지난 7시를 빼고 7일 안의 아침 보고를 그날 일정으로 만든다', () => {
   const planned = planNotifications({
     now,
     settings: { ...defaultSettings, briefing: true },
@@ -34,6 +34,7 @@ test('지난 8시를 빼고 7일 안의 아침 보고를 그날 일정으로 만
     todos: [],
   })
   expect(planned).toHaveLength(6)
+  expect(planned[0].schedule?.at).toEqual(new Date(2026, 10, 25, 7))
   expect(planned[0].body).toContain('일정 1개')
   expect(planned[1].body).toContain('잡힌 일정은 없어요')
   expect(new Set(planned.map(({ id }) => id)).size).toBe(6)

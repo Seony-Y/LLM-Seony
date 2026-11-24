@@ -1,4 +1,4 @@
-import { formatTime, greeting, localDate, sceneFor, type DayState, type Scene } from '../assistant/speech'
+import { DIARY_HOUR, formatTime, greeting, localDate, sceneFor, type DayState, type Scene } from '../assistant/speech'
 
 export interface WidgetEntry {
   /** 이 시각부터 보여준다. */
@@ -13,7 +13,7 @@ export interface WidgetEntry {
 const DAYS = 3
 const HOUR = 3_600_000
 /** 또리의 말이나 배경이 바뀔 수 있는 시각. */
-const TURNING_HOURS = [0, 5, 11, 21]
+const TURNING_HOURS = [0, 5, 11, 21, DIARY_HOUR]
 const EVENT_LINES = 2
 
 /** 앱이 꺼져 있어도 위젯이 때에 맞게 바뀌도록 앞으로의 모습을 미리 만든다. */

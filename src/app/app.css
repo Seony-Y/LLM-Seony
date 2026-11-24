@@ -60,6 +60,16 @@
   color: var(--soft);
 }
 
+.dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e0705a;
+}
+
 @media (min-width: 861px) {
   .gear {
     position: fixed;
@@ -185,7 +195,6 @@
 .account button,
 .settings > button,
 .trash-title button,
-.save-status button,
 .file {
   display: inline-flex;
   align-items: center;
@@ -312,22 +321,6 @@
   white-space: pre-line;
 }
 
-.panel footer {
-  display: grid;
-  gap: 4px;
-  margin-top: auto;
-  color: var(--panel-soft);
-  font-size: 14px;
-}
-
-.save-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .settings-dialog {
   width: min(100% - 32px, 440px);
   max-height: min(100% - 48px, 720px);
@@ -347,6 +340,47 @@
   padding: 24px;
 }
 
+.preferences {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.preferences .actions {
+  justify-content: flex-end;
+}
+
+.confirm-modal {
+  width: min(100% - 48px, 340px);
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  color: var(--panel-soft);
+  background: linear-gradient(var(--panel), var(--panel)), var(--field);
+  font-size: 15px;
+}
+
+.confirm-modal::backdrop {
+  background: #20243a73;
+}
+
+.confirm-modal > div {
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+}
+
+.confirm-modal h2 {
+  color: var(--panel-ink);
+  font-size: 19px;
+}
+
+.confirm-modal .actions {
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
 .settings header {
   display: flex;
   align-items: center;
@@ -364,6 +398,43 @@
   height: 44px;
   margin-right: -10px;
   font-size: 24px;
+}
+
+.bond {
+  margin-bottom: 16px;
+}
+
+.bond p {
+  display: flex;
+  justify-content: space-between;
+  color: var(--panel-ink);
+  font-size: 16px;
+}
+
+.bond small {
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.bond progress {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin-top: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  appearance: none;
+  background: var(--field);
+}
+
+.bond progress::-webkit-progress-bar {
+  background: var(--field);
+}
+
+.bond progress::-webkit-progress-value {
+  border-radius: 5px;
+  background: #f0a39a;
 }
 
 .settings li {
@@ -387,7 +458,6 @@
 
 .settings > button,
 .settings > .trash-title,
-.settings > .confirm,
 .settings > .actions,
 .settings > .account,
 .settings > .toggle,

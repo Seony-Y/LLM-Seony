@@ -66,7 +66,8 @@ export async function emptyTrash(): Promise<void> {
     if (!record.deletedAt || isPurged(record)) continue
     await transaction.store.put({
       ...record,
-      data: { purged: true },
+      // 끝낸 시각은 친밀도가 줄지 않도록 남긴다.
+      data: { purged: true, ...(record.kind === 'todo' ? { doneAt: record.data.doneAt } : {}) },
       updatedAt: nextTimestamp(record.updatedAt),
       dirty: 1,
     } as unknown as AssistantRecord)

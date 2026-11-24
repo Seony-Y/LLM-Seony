@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { bondOf } from '../bond/bond'
 import { importLegacySchedules, isPurged, loadRecords, subscribeRecords } from './recordStore'
 import { defaultSettings, SETTINGS_ID, type AssistantRecord, type Kind } from './types'
 
@@ -49,6 +50,7 @@ export function useRecords() {
         (record) =>
           record.deletedAt && Date.parse(record.deletedAt) > oldest && !isPurged(record),
       ),
+      bond: bondOf(all),
       pending: all.filter(({ dirty }) => dirty).length,
     }
   }, [records, loadedAt, error])

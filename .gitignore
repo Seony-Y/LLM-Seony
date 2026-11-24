@@ -59,3 +59,6 @@ android/llama.cpp/examples/llama.android/lib/build/
 # Wrangler 로컬 상태와 비밀 값
 .wrangler/
 .dev.vars*
+
+# 배포용 산출물
+deploy/

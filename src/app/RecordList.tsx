@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { localDate } from '../features/assistant/speech'
+import { DIARY_HOUR, localDate } from '../features/assistant/speech'
 import { saveRecord, setDeleted } from '../features/records/recordStore'
 import type { Records } from '../features/records/useRecords'
 
@@ -17,7 +17,7 @@ export function RecordList({ view, records, now, onDone }: RecordListProps) {
   if (!records.loaded) return null
 
   if (view === 'diary') {
-    if (!records.diaries.length) return <Empty>밤 9시가 지나면 그날의 일기를 써둘게요.</Empty>
+    if (!records.diaries.length) return <Empty>밤 {DIARY_HOUR - 12}시가 지나면 그날의 일기를 써둘게요.</Empty>
     return records.diaries.slice(0, 30).map(({ id, data }) => (
       <article className="diary" key={id}>
         <h2>{data.date}</h2>
@@ -27,7 +27,7 @@ export function RecordList({ view, records, now, onDone }: RecordListProps) {
   }
 
   if (view === 'todo') {
-    if (!records.todos.length) return <Empty>할 일이 없어요. "빨래하기"처럼 적어보세요.</Empty>
+    if (!records.todos.length) return <Empty>할 일이 없어요. "영양제 먹기"처럼 적어보세요.</Empty>
     const todos = [...records.todos].sort(
       (left, right) => Number(Boolean(left.data.doneAt)) - Number(Boolean(right.data.doneAt)),
     )
@@ -71,7 +71,7 @@ export function RecordList({ view, records, now, onDone }: RecordListProps) {
   }
 
   const upcoming = records.events.filter(({ data }) => localDate(new Date(data.startsAt)) >= localDate(now))
-  if (!upcoming.length) return <Empty>잡힌 일정이 없어요. "내일 3시 치과"처럼 적어보세요.</Empty>
+  if (!upcoming.length) return <Empty>잡힌 일정이 없어요. "내일 3시 업무 회의"처럼 적어보세요.</Empty>
   return (
     <ul>
       {upcoming.map(({ id, data }) => (

@@ -6,10 +6,12 @@
 
 - 한 줄 입력 해석과 확인 카드
 - 상황(시간, 비, 일정 수)에 따라 바뀌는 3D 방과 비서의 말
-- 일정 알림과 아침 8시 보고 (Android)
+- 일정 알림과 아침 7시 보고 (Android)
 - 비서 일기, 기억, 휴지통, 백업 내보내기와 가져오기
 - 전화, 문자, 카카오톡 초안 (Android, 마지막은 사용자가 직접 누름)
+- 친밀도에 따라 늘어나는 방의 물건과 편해지는 말투
 - 홈 화면 위젯 (Android)
+- 앱 설치 없이 화면만 자동 업데이트 (Android)
 - 다른 앱에서 공유한 글을 일정이나 기억으로 받기 (Android)
 - 온디바이스 AI 대화 (Android, 물음표로 끝나는 입력)
 
@@ -41,6 +43,12 @@ npx wrangler secret put ACCESS_KEY               # 32자 이상의 무작위 값
 같은 기록을 여러 기기에서 고치면 나중에 고친 값이 남고, 서버에 있던 이전 값은 `record_history`에 보관됩니다. 백업은 30일 동안 보관하며 `GET /api/backups`로 목록을, `GET /api/backups/날짜`로 파일을 받아 앱의 "백업 가져오기"에 쓸 수 있습니다. 가져오기는 지금 기록보다 최근인 것과 없는 것만 되살립니다.
 
 로컬에서는 `npx wrangler dev --var ACCESS_KEY:<32자 이상>`으로 서버를 띄우면 `npm run dev`가 연결합니다.
+
+## Screen Update
+
+`npm run server:deploy`는 웹 화면과 함께 폰 앱이 받을 서명된 화면 묶음을 올립니다. 폰 앱은 이를 내려받아 다음에 열 때 적용하고, 두 번 연속 열리지 않으면 이전 화면으로 돌아갑니다.
+
+서명 키는 `~/.assistant/update-key.pem`에 있으며 저장소에 넣지 않습니다. 잃어버리면 새 키의 공개 키를 `WebBundles.kt`에 넣고 앱을 다시 설치해야 합니다. 네이티브 기능을 바꿔 새 화면이 옛 앱에서 돌 수 없게 되면 `AppUpdatePlugin.kt`의 `NATIVE_API`와 `scripts/release.mjs`의 `REQUIRES`를 함께 올립니다.
 
 ## Development
 
@@ -87,3 +95,8 @@ android/
 ```
 
 패키지 ID는 `com.seony.assistant`입니다. 날씨와 동기화에만 인터넷을 사용합니다.
+
+## Credits
+
+- 날씨: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0)
+- 동네 이름: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors
