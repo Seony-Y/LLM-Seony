@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { parseInput } from './parseInput'
+import { parseInput, parseShared } from './parseInput'
 import { localDate } from './speech'
 
 // 2026-11-24는 화요일
@@ -47,7 +47,7 @@ test.each([
   ['엄마한테 사랑해라고 문자 보내줘', '사랑해'],
   ['엄마한테 문자 보내줘', ''],
 ])('문자: %s', (input, message) =>
-  expect(parseInput(input, now)).toEqual({ type: 'message', recipient: '엄마', message }),
+  expect(parseInput(input, now)).toEqual({ type: 'message', channel: 'sms', recipient: '엄마', message }),
 )
 
 test.each([
@@ -63,4 +63,24 @@ test.each([
 test('초가 남아 있으면 말한 시간보다 일찍 울리지 않는다', () => {
   const parsed = parseInput('1분 뒤 물', new Date(2026, 10, 24, 10, 0, 50))
   expect(parsed).toMatchObject({ startsAt: new Date(2026, 10, 24, 10, 2) })
+})
+
+test.each([
+  ['엄마한테 늦는다고 카톡', '나 오늘 좀 늦을 것 같아'],
+  ['엄마한테 늦는다고 카톡 보내줘', '나 오늘 좀 늦을 것 같아'],
+  ['엄마에게 사랑해라고 카카오톡 해줘', '사랑해'],
+  ['엄마한테 잘 도착했다고 톡해줘', '잘 도착했다'],
+  ['엄마한테 카톡', ''],
+])('카톡: %s', (input, message) =>
+  expect(parseInput(input, now)).toEqual({ type: 'message', channel: 'kakao', recipient: '엄마', message }),
+)
+
+test('공유받은 글은 명령이나 질문으로 보지 않는다', () => {
+  expect(parseShared('내일 3시에\n강남역에서 볼까?', now)).toEqual({
+    type: 'event',
+    title: '강남역에서 볼까',
+    startsAt: new Date(2026, 10, 25, 15),
+  })
+  expect(parseShared('엄마한테 전화해줘', now).type).toBe('note')
+  expect(parseShared('밥 먹었어?', now)).toEqual({ type: 'note', body: '밥 먹었어?' })
 })

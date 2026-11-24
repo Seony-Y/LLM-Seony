@@ -2,7 +2,7 @@ export type ParsedInput =
   | { type: 'event'; title: string; startsAt: Date }
   | { type: 'todo'; title: string }
   | { type: 'note'; body: string }
-  | { type: 'message'; recipient: string; message: string }
+  | { type: 'message'; channel: 'sms' | 'kakao'; recipient: string; message: string }
   | { type: 'call'; recipient: string }
   | { type: 'question'; text: string }
 
@@ -15,10 +15,15 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
   const text = input.trim().replace(/[.!~]+$/, '').trim()
 
   const message = text.match(
-    /^(.+?)(?:한테|에게|께)\s*(?:(.+?)\s*)?(?:문자|메시지|메세지)(?:를|을)?\s*(?:좀\s*)?(?:(?:보내|써|작성해)\s*(?:줘|줄래)?)?\??$/,
+    /^(.+?)(?:한테|에게|께)\s*(?:(.+?)\s*)??(문자|메시지|메세지|카카오톡|카톡|톡)(?:를|을)?\s*(?:좀\s*)?(?:(?:보내|써|작성해|해)\s*(?:줘|줄래)?)?\??$/,
   )
   if (message) {
-    return { type: 'message', recipient: message[1].trim(), message: toMessage(message[2] ?? '') }
+    return {
+      type: 'message',
+      channel: message[3].endsWith('톡') ? 'kakao' : 'sms',
+      recipient: message[1].trim(),
+      message: toMessage(message[2] ?? ''),
+    }
   }
 
   const call = text.match(
@@ -32,6 +37,16 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
   if (/(하기|사기|가기|내기|찾기|들르기|보내기|예약|해야|해야지|할 것)$/.test(text)) {
     return { type: 'todo', title: text }
   }
+  return { type: 'note', body: text }
+}
+
+const SHARED_TITLE = 100
+
+/** 다른 앱에서 받은 글은 명령으로 보지 않고, 시간이 있으면 일정으로 아니면 기억으로 제안한다. */
+export function parseShared(input: string, now = new Date()): ParsedInput {
+  const text = input.trim()
+  const event = parseEvent(text.replace(/\s+/g, ' ').replace(/[?!.~]+$/, ''), now)
+  if (event?.type === 'event') return { ...event, title: event.title.slice(0, SHARED_TITLE) }
   return { type: 'note', body: text }
 }
 

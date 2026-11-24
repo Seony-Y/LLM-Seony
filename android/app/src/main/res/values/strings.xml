@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">또리</string>
     <string name="title_activity_main">또리</string>
+    <string name="share_label">또리에게 맡기기</string>
     <string name="package_name">com.seony.assistant</string>
     <string name="custom_url_scheme">com.seony.assistant</string>
 </resources>

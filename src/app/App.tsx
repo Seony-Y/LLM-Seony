@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
-import { parseInput } from '../features/assistant/parseInput'
+import { parseInput, parseShared } from '../features/assistant/parseInput'
 import { diaryBody, greeting, localDate, pokeLine, sceneFor, weatherLine, type Line } from '../features/assistant/speech'
-import { composeMessage, dial } from '../features/device/deviceActions'
+import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
 import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
 import {
   getTodayWeather,
@@ -70,6 +70,17 @@ function App() {
   const latestState = useRef(state)
   const scene = sceneFor(state)
   const spoken = line ?? greeting(state)
+
+  useEffect(
+    () =>
+      onSharedText((text) => {
+        const parsed = parseShared(text)
+        if (parsed.type === 'question') return
+        setDraft({ id: Date.now(), value: parsed })
+        setLine({ title: '이거 맡길까요?', body: '공유받은 글이에요. 고쳐서 넣어도 돼요.' })
+      }),
+    [],
+  )
 
   useEffect(() => {
     latestState.current = state
@@ -148,7 +159,8 @@ function App() {
   async function confirm(value: Draft) {
     switch (value.type) {
       case 'message':
-        await composeMessage(value.recipient, value.message)
+        if (value.channel === 'kakao') await shareToKakao(value.message)
+        else await composeMessage(value.recipient, value.message)
         break
       case 'call':
         await dial(value.recipient)

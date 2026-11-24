@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.MediaStore
+import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -22,6 +23,40 @@ import com.getcapacitor.annotation.PermissionCallback
     )]
 )
 class DeviceActionsPlugin : Plugin() {
+    override fun load() {
+        deliverSharedText(activity.intent)
+    }
+
+    override fun handleOnNewIntent(intent: Intent) {
+        super.handleOnNewIntent(intent)
+        deliverSharedText(intent)
+    }
+
+    private fun deliverSharedText(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        // 최근 앱 목록에서 다시 열 때 지난 공유를 또 받지 않는다.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        if (text.isNullOrEmpty()) return
+        // 화면이 아직 준비되지 않았으면 준비될 때까지 보관한다.
+        notifyListeners("sharedText", JSObject().put("text", text.take(MAX_SHARED_TEXT)), true)
+    }
+
+    @PluginMethod
+    fun shareToKakao(call: PluginCall) {
+        val message = call.getString("message")?.trim()
+        if (message.isNullOrEmpty()) {
+            call.reject("보낼 내용이 필요합니다.")
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .setPackage(KAKAO_PACKAGE)
+            .putExtra(Intent.EXTRA_TEXT, message)
+        launch(intent, call, "카카오톡 앱을 찾지 못했습니다.")
+    }
+
     @PluginMethod
     fun openCamera(call: PluginCall) {
         launch(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), call, "카메라 앱을 찾지 못했습니다.")
@@ -125,6 +160,8 @@ class DeviceActionsPlugin : Plugin() {
 
     companion object {
         const val CONTACTS_PERMISSION = "contacts"
+        private const val KAKAO_PACKAGE = "com.kakao.talk"
+        private const val MAX_SHARED_TEXT = 2000
         private val PHONE_NUMBER_PATTERN = Regex("^[+0-9][0-9 ()-]{2,}$")
     }
 }
