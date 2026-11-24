@@ -392,6 +392,11 @@ function App() {
               onAskAi={(exchange) => void askAi(exchange)}
               onKeep={(exchange) => void keep(exchange).catch(console.error)}
               onAccept={acceptProposal}
+              onRemove={({ id }) => setExchanges((list) => list.filter((item) => item.id !== id))}
+              onClear={() => {
+                setExchanges([])
+                setLine({ title: '싹 잊었어요.', body: '새로 이야기해요.' })
+              }}
             />
           ) : (
             <RecordList
