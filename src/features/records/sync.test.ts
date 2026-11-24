@@ -120,7 +120,7 @@ test('휴지통을 비우면 내용이 서버에서도 사라진다', async () =
   await setDeleted('a', true)
   await emptyTrash()
   await syncRecords(remote, 'me')
-  expect(rows.get('a')?.data).toEqual({ purged: true })
+  expect(rows.get('a')?.data).toEqual({ purged: true, doneAt: null })
   expect(rows.get('b')?.data).toMatchObject({ title: '남길 것' })
 })
 

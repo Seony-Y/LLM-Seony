@@ -1,27 +1,27 @@
 import { Capacitor } from '@capacitor/core'
 import { useEffect, useRef, useState } from 'react'
-import {
-  exactAlarmAllowed,
-  openExactAlarmSetting,
-  requestNotificationPermission,
-} from '../features/notify/notifications'
+import { exactAlarmAllowed, openExactAlarmSetting } from '../features/notify/notifications'
 import { exportBackup, importBackup } from '../features/records/backup'
-import { emptyTrash, saveRecord, setDeleted } from '../features/records/recordStore'
-import { SETTINGS_ID, type AssistantRecord, type RecordData, type Tone } from '../features/records/types'
+import { emptyTrash, setDeleted } from '../features/records/recordStore'
+import { applyUpdate, type UpdateStatus } from '../features/update/appUpdate'
+import type { AssistantRecord } from '../features/records/types'
 import { serverConfigured } from '../features/records/serverRecords'
 import type { Records } from '../features/records/useRecords'
 import { requestWidgetPin } from '../features/widget/roomWidget'
 import type { Sync } from '../features/records/useSync'
+import { ConfirmModal } from './ConfirmModal'
+import { Preferences } from './Preferences'
 
 interface SettingsProps {
   records: Records
   sync: Sync
   open: boolean
+  updateStatus: UpdateStatus
   onClose: () => void
 }
 
-export function Settings({ records, sync, open, onClose }: SettingsProps) {
-  const { settings } = records
+export function Settings({ records, sync, open, updateStatus, onClose }: SettingsProps) {
+  const { settings, bond } = records
   const dialog = useRef<HTMLDialogElement>(null)
   const [message, setMessage] = useState('')
   const [exact, setExact] = useState(true)
@@ -45,13 +45,11 @@ export function Settings({ records, sync, open, onClose }: SettingsProps) {
     return () => {
       removeEventListener('popstate', onClose)
       element.close()
+      setEmptying(false)
+      setMessage('')
       if ((history.state as { settings?: boolean } | null)?.settings) history.back()
     }
   }, [open, onClose])
-
-  function update(change: Partial<RecordData['setting']>) {
-    return saveRecord('setting', { ...settings, ...change }, SETTINGS_ID)
-  }
 
   async function attempt(action: () => Promise<string | void>) {
     try {
@@ -59,13 +57,6 @@ export function Settings({ records, sync, open, onClose }: SettingsProps) {
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
     }
-  }
-
-  async function toggleBriefing(on: boolean) {
-    if (on && !(await requestNotificationPermission())) {
-      throw new Error('알림 권한을 허용해야 아침 보고를 보낼 수 있어요.')
-    }
-    await update({ briefing: on })
   }
 
   async function restore(file: File | undefined) {
@@ -87,32 +78,14 @@ export function Settings({ records, sync, open, onClose }: SettingsProps) {
             ×
           </button>
         </header>
-        <div className="fields">
-          <TextField
-            label="비서 이름"
-            value={settings.assistantName}
-            onSave={(assistantName) => update({ assistantName })}
-          />
-          <TextField label="나를 부를 때" value={settings.userName} onSave={(userName) => update({ userName })} />
-          <label>
-            말투
-            <select value={settings.tone} onChange={(event) => update({ tone: event.target.value as Tone })}>
-              <option value="warm">다정한</option>
-              <option value="nag">잔소리꾼</option>
-            </select>
-          </label>
+        <div className="bond">
+          <p>
+            {settings.assistantName}와 {bond.name}
+            <small>{bond.remaining ? `다음까지 ${bond.remaining}` : '더 가까워질 수 없어요'}</small>
+          </p>
+          <progress value={bond.progress} max={1} aria-label="친밀도" />
         </div>
-
-        {isNative && (
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={settings.briefing}
-              onChange={(event) => attempt(() => toggleBriefing(event.target.checked))}
-            />
-            매일 아침 8시에 보고 받기
-          </label>
-        )}
+        {open && <Preferences settings={settings} onSaved={onClose} />}
         {isNative && (
           <button type="button" onClick={() => attempt(requestWidgetPin)}>
             홈 화면에 위젯 추가
@@ -124,6 +97,14 @@ export function Settings({ records, sync, open, onClose }: SettingsProps) {
           </button>
         )}
 
+        {updateStatus === 'installNeeded' && <p role="alert">새 앱 설치가 필요해요.</p>}
+        {updateStatus === 'downloaded' && (
+          <button type="button" onClick={() => attempt(applyUpdate)}>
+            새 화면 적용
+          </button>
+        )}
+
+        <p role={sync.error ? 'alert' : 'status'}>{sync.error || saveStatus(sync, records.pending)}</p>
         <Server sync={sync} attempt={attempt} />
 
         <div className="actions">
@@ -152,29 +133,6 @@ export function Settings({ records, sync, open, onClose }: SettingsProps) {
                 비우기
               </button>
             </div>
-            {emptying && (
-              <div className="confirm" role="alert">
-                <p>휴지통을 모두 지울까요? 되살릴 수 없어요.</p>
-                <div className="actions">
-                  <button
-                    className="primary"
-                    type="button"
-                    onClick={() =>
-                      attempt(async () => {
-                        await emptyTrash()
-                        setEmptying(false)
-                        return '휴지통을 비웠습니다.'
-                      })
-                    }
-                  >
-                    모두 지우기
-                  </button>
-                  <button type="button" onClick={() => setEmptying(false)}>
-                    취소
-                  </button>
-                </div>
-              </div>
-            )}
             <ul>
               {records.trash.map((record) => (
                 <li key={record.id}>
@@ -187,39 +145,37 @@ export function Settings({ records, sync, open, onClose }: SettingsProps) {
             </ul>
           </>
         )}
-        <p>날씨 Open-Meteo, 동네 이름 © OpenStreetMap</p>
       </div>
+      {emptying && (
+        <ConfirmModal
+          title="휴지통을 정말 비울까요?"
+          body="다른 기기와 서버에서도 지워지고 되살릴 수 없어요."
+          confirmLabel="비우기"
+          onCancel={() => setEmptying(false)}
+          onConfirm={() => {
+            setEmptying(false)
+            void attempt(async () => {
+              await emptyTrash()
+              return '휴지통을 비웠습니다.'
+            })
+          }}
+        />
+      )}
     </dialog>
   )
+}
+
+function saveStatus(sync: Sync, pending: number) {
+  if (!sync.connected) return '이 기기에만 저장돼요'
+  if (pending) return `기기에 저장됨, 서버로 보낼 것 ${pending}개`
+  if (!sync.lastSyncedAt) return '서버와 맞추는 중이에요'
+  const time = new Intl.DateTimeFormat('ko-KR', { timeStyle: 'short' })
+  return `서버까지 저장됨, ${time.format(new Date(sync.lastSyncedAt))}`
 }
 
 function recordTitle(record: AssistantRecord) {
   if (record.kind === 'event' || record.kind === 'todo') return record.data.title
   return record.kind === 'setting' ? '설정' : record.data.body
-}
-
-interface TextFieldProps {
-  label: string
-  value: string
-  onSave: (value: string) => Promise<void>
-}
-
-function TextField({ label, value, onSave }: TextFieldProps) {
-  return (
-    <label>
-      {label}
-      <input
-        key={value}
-        defaultValue={value}
-        maxLength={8}
-        onBlur={(event) => {
-          const next = event.target.value.trim()
-          if (next && next !== value) void onSave(next)
-          else event.target.value = value
-        }}
-      />
-    </label>
-  )
 }
 
 interface ServerProps {
@@ -229,7 +185,7 @@ interface ServerProps {
 
 function Server({ sync, attempt }: ServerProps) {
   const [visible, setVisible] = useState(false)
-  if (!serverConfigured) return <p>서버가 아직 연결되지 않아 이 기기에만 저장됩니다.</p>
+  if (!serverConfigured) return null
 
   if (sync.connected) {
     return (

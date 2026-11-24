@@ -8,6 +8,7 @@ export type RoomTarget = 'assistant' | 'diary' | 'event' | 'note' | 'todo' | 'we
 export interface Diorama {
   setScene(scene: Scene): void
   setSky(sky: Sky): void
+  setBond(level: number): void
   hop(): void
   celebrate(): void
   dispose(): void
@@ -298,6 +299,36 @@ function buildProps(parent: THREE.Object3D) {
   return { books, bookStack, calendar, dots, lamp, shade, glow, plant, flower, checklist, checks, sky, skies }
 }
 
+/** 친해질 때마다 하나씩 생기는 물건. 순서가 단계와 같다. */
+function buildGifts(island: THREE.Object3D, body: THREE.Object3D) {
+  const mug = group([-0.72, 0.14, 1.45], island)
+  mesh(lathe([[0, 0], [0.13, 0.01], [0.16, 0.12], [0.16, 0.27], [0.13, 0.27], [0.12, 0.2], [0, 0.18]]), material('#e9a08c', 0.5), [0, 0, 0], mug)
+  mesh(new THREE.TorusGeometry(0.075, 0.025, 10, 24), material('#e9a08c', 0.5), [0.18, 0.14, 0], mug)
+
+  const balloon = group([1.85, 0.14, -0.15], island)
+  mesh(sphere(0.27), material('#f0a39a', 0.25, { clearcoat: 0.6 }), [0, 1.72, 0], balloon).scale.y = 1.18
+  mesh(new THREE.ConeGeometry(0.06, 0.08, 16), material('#f0a39a', 0.4), [0, 1.39, 0], balloon)
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.36, 6), material('#b5a89c'), [0, 0.68, 0], balloon)
+
+  const bird = group([-1.3, 1.46, -0.7], island)
+  bird.rotation.y = 0.5
+  mesh(sphere(0.15), material('#f6cf74', 0.7), [0, 0, 0], bird).scale.set(1, 0.92, 1.05)
+  mesh(sphere(0.1), material('#f6cf74', 0.7), [0, 0.15, 0.04], bird)
+  mesh(new THREE.ConeGeometry(0.03, 0.07, 12), material('#e08a4f'), [0, 0.14, 0.16], bird).rotation.x = Math.PI / 2
+  for (const side of [-1, 1]) {
+    mesh(sphere(0.017), material('#1c2a2e', 0.2), [side * 0.045, 0.18, 0.125], bird)
+    mesh(sphere(0.085), material('#eebb55', 0.7), [side * 0.13, 0, -0.02], bird).scale.set(0.4, 0.7, 1)
+  }
+
+  const crown = group([0, 1.36, 0], body)
+  for (let index = 0; index < 12; index += 1) {
+    const angle = (index / 12) * Math.PI * 2
+    const spot: Point = [Math.cos(angle) * 0.4, 0, Math.sin(angle) * 0.4]
+    mesh(sphere(0.075), material(['#f3a7a0', '#fff3df', '#f6cf74'][index % 3], 0.75), spot, crown)
+  }
+  return [mug, balloon, bird, crown]
+}
+
 export function createDiorama(
   container: HTMLElement,
   onTap: (target: RoomTarget) => void,
@@ -319,6 +350,9 @@ export function createDiorama(
   buildIsland(island)
   const assistant = buildAssistant(island)
   const props = buildProps(island)
+  const gifts = buildGifts(island, assistant.body)
+  const giftScales = gifts.map(() => 0)
+  let bond = 0
 
   const drops = Array.from({ length: RAIN_COUNT }, () => [
     Math.random() * 5 - 2.5,
@@ -428,6 +462,13 @@ export function createDiorama(
     flowerScale += ((blooming ? 1 : 0) - flowerScale) * Math.min(1, elapsed * 9)
     props.flower.scale.setScalar(Math.max(flowerScale, 0.001))
 
+    gifts.forEach((gift, index) => {
+      const target = bond > index ? 1 : 0
+      giftScales[index] = still ? target : giftScales[index] + (target - giftScales[index]) * Math.min(1, elapsed * 5)
+      gift.visible = giftScales[index] > 0.01
+      gift.scale.setScalar(Math.max(giftScales[index], 0.001))
+    })
+    gifts[1].rotation.z = Math.sin(performance.now() / 1400) * (still ? 0 : 0.05)
     const pop = progress('sky')
     props.sky.scale.setScalar(pop === null ? 1 : 1 + Math.sin(pop * Math.PI * 3) * 0.22 * (1 - pop))
     for (const burst of [hearts, confetti, papers]) burst.update(elapsed)
@@ -576,6 +617,10 @@ export function createDiorama(
   return {
     setScene,
     setSky,
+    setBond(level) {
+      bond = level
+      render()
+    },
     hop: () => play('assistant'),
     celebrate,
     dispose() {

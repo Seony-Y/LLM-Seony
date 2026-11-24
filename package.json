@@ -12,8 +12,8 @@
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "test": "vitest run",
-    "server:dev": "npm run build && wrangler d1 migrations apply DB --local && wrangler dev",
-    "server:deploy": "npm run build && wrangler deploy"
+    "server:dev": "npm run build && node scripts/release.mjs && wrangler d1 migrations apply DB --local && wrangler dev",
+    "server:deploy": "npm run build && node scripts/release.mjs && wrangler deploy"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
@@ -38,6 +38,7 @@
     "@types/three": "^0.159.0",
     "@vitejs/plugin-react": "^6.1.1",
     "fake-indexeddb": "^6.2.8",
+    "fflate": "^0.8.3",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",

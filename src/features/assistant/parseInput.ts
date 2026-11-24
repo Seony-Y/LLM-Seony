@@ -6,6 +6,9 @@ export type ParsedInput =
   | { type: 'call'; recipient: string }
   | { type: 'question'; text: string }
 
+/** "감기", "전화기" 같은 이름씨와 섞이지 않게 움직씨만 적는다. */
+const TODO_ENDING =
+  /(?:하|사|가|내|찾|들르|보내|먹|마시|챙기|읽|쓰|보|받|넣|빼|주|맡기|고치|바꾸|만들|치우|버리|끄|켜|걸|씻|닦|돌리|널|옮기|올리|정리하|준비하)기$|(?:예약|해야지?|할 것)$|야\s*(?:해|돼|함|됨)$/
 const WEEKDAYS = '월화수목금토일'
 const HANGUL_HOURS: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4 }
 const MAX_DELAY = 7 * 24 * 60
@@ -34,7 +37,7 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
   const event = parseEvent(text, now)
   if (event) return event
   if (text.endsWith('?')) return { type: 'question', text }
-  if (/(하기|사기|가기|내기|찾기|들르기|보내기|예약|해야|해야지|할 것)$/.test(text)) {
+  if (TODO_ENDING.test(text)) {
     return { type: 'todo', title: text }
   }
   return { type: 'note', body: text }

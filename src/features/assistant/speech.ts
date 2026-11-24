@@ -9,6 +9,8 @@ export interface Line {
 }
 
 export interface DayState {
+  /** 친밀도 단계. 가까워지면 말이 편해진다. */
+  bondLevel?: number
   now: Date
   settings: RecordData['setting']
   events: AssistantRecord<'event'>[]
@@ -58,6 +60,7 @@ export function greeting(state: DayState): Line {
   const next = today.find((event) => new Date(event.data.startsAt) > now)
   const open = openTodos(state.todos).length
   const done = doneOn(now, state.todos).length
+  const diaryWritten = now.getHours() >= DIARY_HOUR
 
   switch (sceneFor(state)) {
     case 'night':
@@ -70,7 +73,7 @@ export function greeting(state: DayState): Line {
       return {
         title: `수고했어요, ${name}.`,
         body: done
-          ? `오늘 ${done}개나 해냈어요. 일기 써뒀으니 보고 자요.`
+          ? `오늘 ${done}개나 해냈어요. ${diaryWritten ? '일기 써뒀으니 보고 자요.' : '이제 좀 쉬어요.'}`
           : '푹 쉬는 것도 일이에요. 잘 자요.',
       }
     case 'rain': {
@@ -87,6 +90,10 @@ export function greeting(state: DayState): Line {
     default: {
       let title = nag ? '딴짓하고 있었죠?' : `${name}, 잘 지내고 있어요?`
       if (now.getHours() < 11) title = nag ? '이제 일어났어요?' : `${name}, 잘 잤어요?`
+      if ((state.bondLevel ?? 0) >= CLOSE_LEVEL) {
+        title = nag ? `${name}, 또 딴짓했지?` : `${name}, 왔어?`
+        if (now.getHours() < 11) title = nag ? '이제 일어났어?' : `${name}, 잘 잤어?`
+      }
       if (next) {
         const time = formatTime(new Date(next.data.startsAt))
         return { title, body: `다음은 ${time} ${next.data.title}. ${nag ? '늦지 마요.' : '천천히 가요.'}` }
@@ -107,11 +114,20 @@ export function greeting(state: DayState): Line {
   }
 }
 
+export const DIARY_HOUR = 22
+/** 이 단계부터 인사말이 반말이 된다. */
+const CLOSE_LEVEL = 3
+const BOND_LINES: { level: number; line: Line }[] = [
+  { level: 1, line: { title: '컵 생겼어요!', body: '차 한 잔 하고 갈래요?' } },
+  { level: 2, line: { title: '{u} 목소리 들으니 좋네요.', body: '풍선 잘 어울리죠?' } },
+  { level: 3, line: { title: '{u}, 나 친구 생겼어.', body: '버섯 위에 앉아 있는 애 보여?' } },
+  { level: 4, line: { title: '{u}, 우리 꽤 오래 봤다.', body: '이 화관, {u} 생각하면서 썼어.' } },
+]
 const SKY_WORDS = { sun: '맑아요', moon: '맑아요', cloud: '구름이 꼈어요', snow: '눈이 와요', rain: '비가 와요' }
 const SKY_NAMES = { sun: '맑음', moon: '맑음', cloud: '흐림', snow: '눈', rain: '비' }
 
-export function weatherSummary({ place, isDay, sky, temperature }: TodayWeather): string {
-  return [place, isDay ? '낮' : '밤', `${SKY_NAMES[sky]} ${temperature}°`].filter(Boolean).join(' · ')
+export function weatherSummary({ place, sky, temperature }: TodayWeather, now: Date): string {
+  return [place, formatTime(now), `${SKY_NAMES[sky]} ${temperature}°`].filter(Boolean).join(' · ')
 }
 
 export function weatherLine({ place, sky, temperature, rainAt }: TodayWeather, now: Date): Line {
@@ -122,7 +138,7 @@ export function weatherLine({ place, sky, temperature, rainAt }: TodayWeather, n
   }
 }
 
-export function pokeLine(settings: RecordData['setting'], turn: number): Line {
+export function pokeLine(settings: RecordData['setting'], turn: number, bondLevel = 0): Line {
   const lines: Line[] =
     settings.tone === 'nag'
       ? [
@@ -133,6 +149,12 @@ export function pokeLine(settings: RecordData['setting'], turn: number): Line {
           { title: '저 부르셨어요?', body: '오늘 뭐 먹었는지 알려줘요. 기억해 둘게요.' },
           { title: '여기 있어요.', body: '심심하면 제가 기억하는 것들 볼래요?' },
         ]
+  for (const { level, line } of BOND_LINES) {
+    if (bondLevel >= level) {
+      const fill = (text: string) => text.replace('{u}', settings.userName)
+      lines.push({ title: fill(line.title), body: fill(line.body) })
+    }
+  }
   return lines[turn % lines.length]
 }
 

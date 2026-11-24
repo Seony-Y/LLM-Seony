@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
 import { parseInput, parseShared } from '../features/assistant/parseInput'
-import { diaryBody, greeting, localDate, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
+import { pendingDiaries } from '../features/assistant/diary'
+import { greeting, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
 import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
 import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
 import {
@@ -16,6 +17,7 @@ import { useRecords } from '../features/records/useRecords'
 import { useSync } from '../features/records/useSync'
 import { Room } from '../features/room/Room'
 import type { RoomTarget } from '../features/room/diorama'
+import { useUpdate } from '../features/update/useUpdate'
 import { onWidgetPrompt, updateWidget } from '../features/widget/roomWidget'
 import { buildTimeline } from '../features/widget/timeline'
 import { ConfirmCard, type Draft } from './ConfirmCard'
@@ -25,6 +27,9 @@ import './app.css'
 
 const MINUTE = 60_000
 const WEATHER_MINUTES = 30
+/** 방금 한 일에 대한 반응이 보인 뒤에 축하한다. */
+const LEVEL_UP_DELAY = 1800
+const SEEN_LEVEL_KEY = 'personal-assistant.bond-level'
 
 const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
   {
@@ -65,15 +70,18 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
-  const { loaded, settings, events, todos, diaries } = records
+  const { loaded, settings, events, todos, diaries, bond } = records
+  const updateStatus = useUpdate(loaded)
   const state = useMemo(
-    () => ({ now, settings, events, todos, weather }),
-    [now, settings, events, todos, weather],
+    () => ({ now, settings, events, todos, weather, bondLevel: bond.level }),
+    [now, settings, events, todos, weather, bond.level],
   )
   const latestState = useRef(state)
   const promptInput = useRef<HTMLInputElement>(null)
   const scene = sceneFor(state)
   const spoken = line ?? greeting(state)
+  const needsAttention =
+    sync.error !== '' || updateStatus !== 'latest' || (serverConfigured && !sync.connected)
 
   useEffect(
     () =>
@@ -123,17 +131,25 @@ function App() {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
   }, [loaded, settings, events, todos, weather])
 
+  useEffect(() => {
+    if (!loaded || bond.level <= readSeenLevel()) return
+    writeSeenLevel(bond.level)
+    const timer = setTimeout(() => {
+      setCheers((count) => count + 1)
+      setHops((count) => count + 1)
+      setLine({ title: `이제 ${bond.name}예요!`, body: `방에 ${bond.gift}${objectParticle(bond.gift)} 들여놨어요.` })
+    }, LEVEL_UP_DELAY)
+    return () => clearTimeout(timer)
+  }, [loaded, bond.level, bond.name, bond.gift])
+
   useEffect(() => onWidgetPrompt(() => promptInput.current?.focus()), [])
 
   useEffect(() => {
-    if (!loaded || now.getHours() < 21) return
-    const date = localDate(now)
-    const body = diaryBody(state)
-    const written = diaries.find((diary) => diary.data.date === date)
-    if (written?.data.body !== body) {
+    if (!loaded) return
+    for (const { date, body } of pendingDiaries(state, diaries)) {
       void saveRecord('diary', { date, body }, `diary-${date}`).catch(console.error)
     }
-  }, [loaded, now, state, diaries])
+  }, [loaded, state, diaries])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -208,7 +224,7 @@ function App() {
     if (target !== 'assistant') return setView(target)
     setHops((count) => count + 1)
     setPokes((count) => count + 1)
-    setLine(pokeLine(settings, pokes))
+    setLine(pokeLine(settings, pokes, bond.level))
   }
 
   function speakWeather() {
@@ -231,7 +247,7 @@ function App() {
       <section className="stage">
         <div className="speech">
           <button className="weather" type="button" onClick={speakWeather}>
-            {weather ? weatherSummary(weather) : '날씨 켜기'}
+            {weather ? weatherSummary(weather, now) : '날씨 켜기'}
           </button>
           <div aria-live="polite">
             <h1>{spoken.title}</h1>
@@ -241,7 +257,7 @@ function App() {
         <button
           className="gear"
           type="button"
-          aria-label="설정"
+          aria-label={needsAttention ? '설정, 확인할 것이 있음' : '설정'}
           aria-haspopup="dialog"
           onClick={() => setSettingsOpen(true)}
         >
@@ -249,8 +265,9 @@ function App() {
             <circle cx="12" cy="12" r="3.2" />
             <path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 00-2.6-1.5L14 2.5h-4L9.6 5a7.6 7.6 0 00-2.6 1.500l-2.4-1-2 3.4 2 1.600a7.6 7.6 0 000 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 002.6 1.500l.4 2.500h4l.4-2.500a7.6 7.6 0 002.6-1.500l2.4 1 2-3.400z" />
           </svg>
+          {needsAttention && <i className="dot" />}
         </button>
-        <Room scene={scene} sky={weather?.sky ?? 'cloud'} hops={hops} cheers={cheers} onTap={tapRoom} />
+        <Room scene={scene} sky={weather?.sky ?? 'cloud'} bondLevel={bond.level} hops={hops} cheers={cheers} onTap={tapRoom} />
       </section>
 
       <section className="panel">
@@ -313,35 +330,37 @@ function App() {
           />
         </div>
 
-        <footer>
-          <div className="save-status">
-            <p role={sync.error ? 'alert' : undefined}>
-              {sync.error || saveStatus(sync, records.pending)}
-            </p>
-            {serverConfigured && !sync.connected && (
-              <button type="button" onClick={() => setSettingsOpen(true)}>
-                서버 연결하기
-              </button>
-            )}
-          </div>
-          <Settings
-            records={records}
-            sync={sync}
-            open={settingsOpen}
-            onClose={closeSettings}
-          />
-        </footer>
       </section>
+      <Settings
+        records={records}
+        sync={sync}
+        open={settingsOpen}
+        updateStatus={updateStatus}
+        onClose={closeSettings}
+      />
     </main>
   )
 }
 
-function saveStatus(sync: ReturnType<typeof useSync>, pending: number) {
-  if (!sync.connected) return '이 기기에만 저장돼요'
-  if (pending) return `기기에 저장됨, 서버로 보낼 것 ${pending}개`
-  if (!sync.lastSyncedAt) return '서버와 맞추는 중이에요'
-  const time = new Intl.DateTimeFormat('ko-KR', { timeStyle: 'short' })
-  return `서버까지 저장됨, ${time.format(new Date(sync.lastSyncedAt))}`
+/** 이 기기에서 축하한 단계. 저장할 수 없으면 다시 축하할 뿐이다. */
+function readSeenLevel() {
+  try {
+    return Number(localStorage.getItem(SEEN_LEVEL_KEY) ?? 0)
+  } catch {
+    return 0
+  }
+}
+
+function writeSeenLevel(level: number) {
+  try {
+    localStorage.setItem(SEEN_LEVEL_KEY, String(level))
+  } catch {
+    // 다음에 다시 축하한다.
+  }
+}
+
+function objectParticle(word: string) {
+  return (word.charCodeAt(word.length - 1) - 0xac00) % 28 ? '을' : '를'
 }
 
 function useNow() {

@@ -6,12 +6,13 @@ import type { Diorama, RoomTarget } from './diorama'
 interface RoomProps {
   scene: Scene
   sky: Sky
+  bondLevel: number
   hops: number
   cheers: number
   onTap: (target: RoomTarget) => void
 }
 
-export function Room({ scene, sky, hops, cheers, onTap }: RoomProps) {
+export function Room({ scene, sky, bondLevel, hops, cheers, onTap }: RoomProps) {
   const container = useRef<HTMLDivElement>(null)
   const tapHandler = useRef(onTap)
   const [diorama, setDiorama] = useState<Diorama | null>(null)
@@ -48,6 +49,10 @@ export function Room({ scene, sky, hops, cheers, onTap }: RoomProps) {
   useEffect(() => {
     diorama?.setSky(sky)
   }, [diorama, sky])
+
+  useEffect(() => {
+    diorama?.setBond(bondLevel)
+  }, [diorama, bondLevel])
 
   useEffect(() => {
     if (hops) diorama?.hop()

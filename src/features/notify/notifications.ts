@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core'
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications'
 import { briefing, localDate, type DayState } from '../assistant/speech'
 
-const BRIEFING_HOUR = 8
+export const BRIEFING_HOUR = 7
 const BRIEFING_DAYS = 7
 const EVENT_LIMIT = 50
 
