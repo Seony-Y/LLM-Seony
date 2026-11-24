@@ -25,7 +25,8 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
   async function confirm(event: React.FormEvent) {
     event.preventDefault()
     const value = text.trim()
-    if (!value && draft.type !== 'message') return setError('내용을 적어주세요.')
+    const emptyAllowed = draft.type === 'message' && draft.channel === 'sms'
+    if (!value && !emptyAllowed) return setError('내용을 적어주세요.')
     const date = new Date(startsAt)
     if (type === 'event' && !(date > new Date())) return setError('앞으로 올 시간을 골라주세요.')
 
@@ -50,7 +51,7 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
           ))}
         </div>
       ) : (
-        <small>{draft.type === 'message' ? `${draft.recipient}에게 보낼 문자` : '전화 걸 사람'}</small>
+        <small>{contactLabel(draft)}</small>
       )}
       <input
         aria-label="내용"
@@ -69,7 +70,7 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
       {error && <p role="alert">{error}</p>}
       <div className="actions">
         <button className="primary" type="submit" disabled={busy}>
-          {{ message: '문자 앱 열기', call: '전화 화면 열기' }[type as string] ?? '넣기'}
+          {confirmLabel(draft, isRecord)}
         </button>
         <button type="button" onClick={onCancel}>
           취소
@@ -77,6 +78,19 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
       </div>
     </form>
   )
+}
+
+function contactLabel(draft: Draft) {
+  if (draft.type !== 'message') return '전화 걸 사람'
+  return draft.channel === 'kakao'
+    ? `${draft.recipient}에게 보낼 카톡, 받는 사람은 카톡에서 골라요`
+    : `${draft.recipient}에게 보낼 문자`
+}
+
+function confirmLabel(draft: Draft, isRecord: boolean) {
+  if (isRecord) return '넣기'
+  if (draft.type !== 'message') return '전화 화면 열기'
+  return draft.channel === 'kakao' ? '카톡 열기' : '문자 앱 열기'
 }
 
 function draftText(draft: Draft) {
