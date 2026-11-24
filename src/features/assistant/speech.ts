@@ -1,4 +1,5 @@
 import type { TodayWeather } from '../online/weather'
+import { relatedNotes } from '../recall/recall'
 import type { AssistantRecord, RecordData } from '../records/types'
 
 export type Scene = 'morning' | 'rain' | 'busy' | 'night'
@@ -16,6 +17,7 @@ export interface DayState {
   events: AssistantRecord<'event'>[]
   todos: AssistantRecord<'todo'>[]
   weather: TodayWeather | null
+  notes?: AssistantRecord<'note'>[]
 }
 
 export function localDate(date: Date) {
@@ -96,7 +98,12 @@ export function greeting(state: DayState): Line {
       }
       if (next) {
         const time = formatTime(new Date(next.data.startsAt))
-        return { title, body: `다음은 ${time} ${next.data.title}. ${nag ? '늦지 마요.' : '천천히 가요.'}` }
+        const memory = relatedNotes(next.data.title, state.notes ?? [])[0]?.data.body
+        const ending = nag ? '늦지 마요.' : '천천히 가요.'
+        return {
+          title,
+          body: `다음은 ${time} ${next.data.title}. ${memory ? `\n기억하죠? ${memory}` : ending}`,
+        }
       }
       if (open) {
         return {

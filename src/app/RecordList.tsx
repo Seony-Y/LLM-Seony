@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react'
+import { relatedNotes } from '../features/recall/recall'
 import { DIARY_HOUR, localDate } from '../features/assistant/speech'
 import { saveRecord, setDeleted } from '../features/records/recordStore'
 import type { Records } from '../features/records/useRecords'
+import { formatDay } from './dates'
 
-export type View = 'event' | 'todo' | 'diary' | 'note'
+export type View = 'event' | 'todo' | 'diary' | 'note' | 'talk'
 
 interface RecordListProps {
-  view: View
+  view: Exclude<View, 'talk'>
   records: Records
   now: Date
   onDone: (title: string) => void
@@ -80,6 +82,7 @@ export function RecordList({ view, records, now, onDone }: RecordListProps) {
           id={id}
           title={data.title}
           detail={`${formatDay(data.startsAt, now)} ${formatClock(data.startsAt)}${data.remind ? '' : ' · 알림 없음'}`}
+          memories={relatedNotes(data.title, records.notes).map((note) => note.data.body)}
         />
       ))}
     </ul>
@@ -90,17 +93,23 @@ interface RowProps {
   id: string
   title: string
   detail: string
+  memories?: string[]
   done?: boolean
   children?: ReactNode
 }
 
-function Row({ id, title, detail, done, children }: RowProps) {
+function Row({ id, title, detail, memories, done, children }: RowProps) {
   return (
     <li className={done ? 'done' : undefined}>
       {children}
       <div>
         {title}
         <small>{detail}</small>
+        {memories?.map((memory) => (
+          <small className="memory" key={memory}>
+            {memory}
+          </small>
+        ))}
       </div>
       <button
         className="remove"
@@ -116,15 +125,6 @@ function Row({ id, title, detail, done, children }: RowProps) {
 
 function Empty({ children }: { children: ReactNode }) {
   return <p className="empty">{children}</p>
-}
-
-function formatDay(iso: string, now: Date) {
-  const date = new Date(iso)
-  const tomorrow = new Date(now)
-  tomorrow.setDate(now.getDate() + 1)
-  if (localDate(date) === localDate(now)) return '오늘'
-  if (localDate(date) === localDate(tomorrow)) return '내일'
-  return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }).format(date)
 }
 
 function formatClock(iso: string) {

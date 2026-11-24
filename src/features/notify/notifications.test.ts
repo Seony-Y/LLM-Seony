@@ -26,6 +26,32 @@ test('앞으로 있을, 알림을 켠 일정만 울린다', () => {
   expect(planned.map(({ title }) => title)).toEqual(['next'])
 })
 
+test('아는 것이 있는 일정은 30분 전에 떠올려준다', () => {
+  const at = now.toISOString()
+  const note: AssistantRecord<'note'> = {
+    id: 'n',
+    kind: 'note',
+    data: { body: '민수 딸 이름은 서연' },
+    createdAt: at,
+    updatedAt: at,
+    deletedAt: null,
+    dirty: 0,
+  }
+  const planned = planNotifications({
+    now,
+    settings: defaultSettings,
+    events: [event('민수와 저녁', new Date(2026, 10, 24, 19)), event('업무 회의', new Date(2026, 10, 24, 15))],
+    todos: [],
+    notes: [note],
+  })
+  expect(planned).toHaveLength(3)
+  expect(planned[2]).toMatchObject({
+    title: '30분 뒤 민수와 저녁',
+    body: '기억하죠? 민수 딸 이름은 서연',
+    schedule: { at: new Date(2026, 10, 24, 18, 30) },
+  })
+})
+
 test('지난 7시를 빼고 7일 안의 아침 보고를 그날 일정으로 만든다', () => {
   const planned = planNotifications({
     now,

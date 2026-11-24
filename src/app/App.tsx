@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
 import { parseInput, parseShared } from '../features/assistant/parseInput'
+import { answer, chat } from '../features/assistant/answer'
 import { pendingDiaries } from '../features/assistant/diary'
 import { greeting, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
 import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
@@ -21,12 +22,14 @@ import { useUpdate } from '../features/update/useUpdate'
 import { onWidgetPrompt, updateWidget } from '../features/widget/roomWidget'
 import { buildTimeline } from '../features/widget/timeline'
 import { ConfirmCard, type Draft } from './ConfirmCard'
+import { Conversation, type Exchange } from './Conversation'
 import { RecordList, type View } from './RecordList'
 import { Settings } from './Settings'
 import './app.css'
 
 const MINUTE = 60_000
 const WEATHER_MINUTES = 30
+const EXCHANGE_LIMIT = 30
 /** 방금 한 일에 대한 반응이 보인 뒤에 축하한다. */
 const LEVEL_UP_DELAY = 1800
 const SEEN_LEVEL_KEY = 'personal-assistant.bond-level'
@@ -52,6 +55,11 @@ const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
     label: '기억',
     icon: <path d="M12 20V10M12 12C7 12 5 9 5 5c5 0 7 3 7 7zM12 14c4 0 7-2 7-6-4 0-7 2-7 6z" />,
   },
+  {
+    view: 'talk',
+    label: '대화',
+    icon: <path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4.5 3.5V17H5a2 2 0 01-2-2V7a2 2 0 012-2z" />,
+  },
 ]
 
 function App() {
@@ -67,14 +75,15 @@ function App() {
   const [hops, setHops] = useState(0)
   const [cheers, setCheers] = useState(0)
   const [thinking, setThinking] = useState(false)
+  const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
-  const { loaded, settings, events, todos, diaries, bond } = records
+  const { loaded, settings, events, todos, notes, diaries, bond } = records
   const updateStatus = useUpdate(loaded)
   const state = useMemo(
-    () => ({ now, settings, events, todos, weather, bondLevel: bond.level }),
-    [now, settings, events, todos, weather, bond.level],
+    () => ({ now, settings, events, todos, notes, weather, bondLevel: bond.level }),
+    [now, settings, events, todos, notes, weather, bond.level],
   )
   const latestState = useRef(state)
   const promptInput = useRef<HTMLInputElement>(null)
@@ -88,6 +97,7 @@ function App() {
       onSharedText((text) => {
         const parsed = parseShared(text)
         if (parsed.type === 'question') return
+        setView(parsed.type === 'note' ? 'note' : 'event')
         setDraft({ id: Date.now(), value: parsed })
         setLine({ title: '이거 맡길까요?', body: '공유받은 글이에요. 고쳐서 넣어도 돼요.' })
       }),
@@ -125,11 +135,11 @@ function App() {
     if (loaded) void applyNotifications(state).catch(console.error)
     // 시간이 흐르는 것만으로는 예약을 다시 하지 않는다.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, settings, events, todos])
+  }, [loaded, settings, events, todos, notes])
 
   useEffect(() => {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
-  }, [loaded, settings, events, todos, weather])
+  }, [loaded, settings, events, todos, notes, weather])
 
   useEffect(() => {
     if (!loaded || bond.level <= readSeenLevel()) return
@@ -157,25 +167,77 @@ function App() {
     if (!input || thinking) return
     const parsed = parseInput(input)
     setPrompt('')
-    if (parsed.type !== 'question') {
+    if (view === 'talk' && parsed.type !== 'question' && parsed.type !== 'note') {
+      setDraft(null)
+      addExchange({ question: input, reply: proposalText(parsed), proposal: parsed })
+      setLine({ title: '맡기는 거예요?', body: '아래에서 골라주세요.' })
+      return
+    }
+    if (view !== 'talk' && parsed.type !== 'question') {
       setDraft({ id: Date.now(), value: parsed })
       setLine({ title: '이렇게 이해했어요.', body: '틀린 데가 있으면 고쳐도 돼요.' })
       return
     }
 
     setDraft(null)
+    setView('talk')
+    const reply =
+      parsed.type === 'question' ? answer(input, { ...state, notes, diaries }) : chat(input, state)
+    const id = addExchange({
+      question: input,
+      reply: reply.text,
+      items: reply.items,
+      unknown: reply.unknown,
+    })
+    setLine({ title: reply.title, body: reply.title === reply.text ? '' : '아래에 적어뒀어요.' })
+    setHops((count) => count + 1)
+
+    if (reply.action?.type === 'writeDiary') {
+      const { date, body } = reply.action
+      await saveRecord('diary', { date, body }, `diary-${date}`)
+    } else if (reply.action?.type === 'loadWeather') {
+      const text = await enableWeather().catch((error: Error) => error.message)
+      updateExchange(id, { reply: text })
+    }
+  }
+
+  function addExchange(exchange: Omit<Exchange, 'id'>) {
+    const id = Date.now()
+    setExchanges((list) => [{ ...exchange, id }, ...list].slice(0, EXCHANGE_LIMIT))
+    return id
+  }
+
+  function acceptProposal({ id, proposal }: Exchange) {
+    if (!proposal) return
+    updateExchange(id, { proposal: undefined })
+    setView(proposal.type === 'todo' ? 'todo' : 'event')
+    setDraft({ id: Date.now(), value: proposal })
+    setLine({ title: '이렇게 이해했어요.', body: '틀린 데가 있으면 고쳐도 돼요.' })
+  }
+
+  function updateExchange(id: number, change: Partial<Exchange>) {
+    setExchanges((list) => list.map((item) => (item.id === id ? { ...item, ...change } : item)))
+  }
+
+  async function askAi({ id, question }: Exchange) {
     setThinking(true)
     setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
     try {
-      setLine({ title: input, body: await requestAssistant(input) })
+      const reply = await requestAssistant(question, settings)
+      updateExchange(id, { reply, unknown: false, fromAi: true })
+      setLine({ title: '생각해봤어요.', body: '아래에 적어뒀어요.' })
     } catch (error) {
-      setLine({
-        title: '잘 모르겠어요.',
-        body: error instanceof Error ? error.message : '다시 물어봐 주세요.',
-      })
+      updateExchange(id, { reply: error instanceof Error ? error.message : '다시 물어봐 주세요.' })
+      setLine({ title: '잘 모르겠어요.', body: '아래에 이유를 적어뒀어요.' })
     } finally {
       setThinking(false)
     }
+  }
+
+  async function keep({ id, question }: Exchange) {
+    await saveRecord('note', { body: question })
+    updateExchange(id, { reply: '기억해 뒀어요.', unknown: false })
+    setLine({ title: '기억해 뒀어요.', body: '나중에 물어보면 찾아줄게요.' })
   }
 
   async function scheduleReminders() {
@@ -278,7 +340,11 @@ function App() {
             autoComplete="off"
             enterKeyHint="send"
             maxLength={2000}
-            placeholder={`${settings.assistantName}에게 슬쩍 말해보세요`}
+            placeholder={
+              view === 'talk'
+                ? `${settings.assistantName}와 이야기해요`
+                : `${settings.assistantName}에게 슬쩍 말해보세요`
+            }
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
           />
@@ -289,7 +355,7 @@ function App() {
           </button>
         </form>
 
-        {draft && (
+        {draft && view !== 'talk' && (
           <ConfirmCard
             key={draft.id}
             draft={draft.value}
@@ -318,16 +384,27 @@ function App() {
         </nav>
 
         <div>
-          <RecordList
-            view={view}
-            records={records}
-            now={now}
-            onDone={() => {
-              setCheers((count) => count + 1)
-              setHops((count) => count + 1)
-              setLine({ title: '하나 끝!', body: '오늘 일기에 적어둘게요.' })
-            }}
-          />
+          {view === 'talk' ? (
+            <Conversation
+              exchanges={exchanges}
+              now={now}
+              thinking={thinking}
+              onAskAi={(exchange) => void askAi(exchange)}
+              onKeep={(exchange) => void keep(exchange).catch(console.error)}
+              onAccept={acceptProposal}
+            />
+          ) : (
+            <RecordList
+              view={view}
+              records={records}
+              now={now}
+              onDone={() => {
+                setCheers((count) => count + 1)
+                setHops((count) => count + 1)
+                setLine({ title: '하나 끝!', body: '오늘 일기에 적어둘게요.' })
+              }}
+            />
+          )}
         </div>
 
       </section>
@@ -361,6 +438,23 @@ function writeSeenLevel(level: number) {
 
 function objectParticle(word: string) {
   return (word.charCodeAt(word.length - 1) - 0xac00) % 28 ? '을' : '를'
+}
+
+function proposalText(draft: Draft) {
+  switch (draft.type) {
+    case 'event': {
+      const when = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
+      return `일정으로 넣을까요?\n${when.format(draft.startsAt)} ${draft.title}`
+    }
+    case 'todo':
+      return `할 일에 넣을까요?\n${draft.title}`
+    case 'message':
+      return `${draft.recipient}에게 보낼 글을 써볼까요?`
+    case 'call':
+      return `${draft.recipient}에게 전화할까요?`
+    case 'note':
+      return '기억해 둘까요?'
+  }
 }
 
 function useNow() {

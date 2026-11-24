@@ -1,12 +1,15 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications'
+import { relatedNotes } from '../recall/recall'
 import { briefing, localDate, type DayState } from '../assistant/speech'
 
 export const BRIEFING_HOUR = 7
 const BRIEFING_DAYS = 7
 const EVENT_LIMIT = 50
 
-type PlanState = Pick<DayState, 'now' | 'settings' | 'events' | 'todos'>
+const MEMORY_LEAD = 30 * 60_000
+
+type PlanState = Pick<DayState, 'now' | 'settings' | 'events' | 'todos' | 'notes'>
 
 function notificationId(key: string) {
   let hash = 2166136261
@@ -18,17 +21,30 @@ function notificationId(key: string) {
 
 /** 지금 기록으로 울려야 할 알림 전체. 기기에 예약된 알림은 항상 이 목록과 같아야 한다. */
 export function planNotifications(state: PlanState): LocalNotificationSchema[] {
-  const { now, settings, events } = state
-  const planned: LocalNotificationSchema[] = events
+  const { now, settings, events, notes = [] } = state
+  const upcoming = events
     .filter((event) => event.data.remind && new Date(event.data.startsAt) > now)
     .sort((left, right) => left.data.startsAt.localeCompare(right.data.startsAt))
     .slice(0, EVENT_LIMIT)
-    .map((event) => ({
-      id: notificationId(`event:${event.id}`),
-      title: event.data.title,
-      body: event.data.note || `${settings.assistantName}: 지금이에요.`,
-      schedule: { at: new Date(event.data.startsAt), allowWhileIdle: true },
-    }))
+  const planned: LocalNotificationSchema[] = upcoming.map((event) => ({
+    id: notificationId(`event:${event.id}`),
+    title: event.data.title,
+    body: event.data.note || `${settings.assistantName}: 지금이에요.`,
+    schedule: { at: new Date(event.data.startsAt), allowWhileIdle: true },
+  }))
+
+  // 만나기 전에 떠올릴 수 있게, 아는 것이 있는 일정만 미리 알린다.
+  for (const event of upcoming) {
+    const at = new Date(Date.parse(event.data.startsAt) - MEMORY_LEAD)
+    const memories = relatedNotes(event.data.title, notes).map(({ data }) => data.body)
+    if (at <= now || memories.length === 0) continue
+    planned.push({
+      id: notificationId(`memory:${event.id}`),
+      title: `30분 뒤 ${event.data.title}`,
+      body: `기억하죠? ${memories.join(' · ')}`,
+      schedule: { at, allowWhileIdle: true },
+    })
+  }
 
   for (let offset = 0; settings.briefing && offset < BRIEFING_DAYS; offset += 1) {
     const at = new Date(now)
