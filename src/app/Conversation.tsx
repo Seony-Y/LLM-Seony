@@ -1,4 +1,3 @@
-import { Capacitor } from '@capacitor/core'
 import { useEffect, useRef, useState } from 'react'
 import type { Turn } from '../features/records/types'
 import type { Recalled } from '../features/recall/recall'
@@ -19,6 +18,8 @@ interface ConversationProps {
   exchanges: Exchange[]
   /** 서버에 연결되어 AI와 이야기할 수 있다. */
   connected: boolean
+  /** 폰에 AI 모델이 들어 있다. */
+  localAi: boolean
   now: Date
   thinking: boolean
   onAskAi: (exchange: Exchange) => void
@@ -33,6 +34,7 @@ const KIND = { event: '일정', todo: '할 일', note: '기억' }
 export function Conversation({
   exchanges,
   connected,
+  localAi,
   now,
   thinking,
   onAskAi,
@@ -106,7 +108,7 @@ export function Conversation({
                 onCancel={() => onDecline(exchange)}
               />
             )}
-            {exchange.unknown && Capacitor.isNativePlatform() && (
+            {exchange.unknown && localAi && (
               <div className="actions">
                 <button type="button" disabled={thinking} onClick={() => onAskAi(exchange)}>
                   {thinking ? '생각하는 중' : '폰 AI에게 물어보기'}

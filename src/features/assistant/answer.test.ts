@@ -66,3 +66,21 @@ test('그냥 하는 말에는 맞장구치고, 기억할지는 고르게 한다'
   expect(chat('회사에서 자리를 옮겼어', source)).toMatchObject({ text: '그랬군요. 더 들려줘요.', unknown: true })
   expect(chat('고마워', source).unknown).toBe(false)
 })
+
+test('묻는 날의 날씨를 답한다', () => {
+  const day = (offset: number, sky: 'sun' | 'rain', high: number) => {
+    const date = new Date(2026, 10, 24 + offset)
+    return { date: `2026-11-${24 + offset}`, sky, low: 1, high, rainAt: sky === 'rain' ? new Date(date.setHours(15)) : null }
+  }
+  const weather = {
+    sky: 'sun' as const, isDay: true, place: '', temperature: 3, rainAt: null,
+    days: [day(0, 'sun', 8), day(1, 'rain', 6), day(4, 'sun', 12)],
+  }
+  const said = (text: string) => answer(text, { ...source, weather }).text
+  expect(said('내일 우산 필요해?')).toContain('오후 3:00부터 비')
+  expect(said('토요일 날씨 어때?')).toContain('12°')
+  expect(said('오늘 몇 도까지 올라가?')).toContain('1°에서 8°')
+  expect(said('모레 날씨 어때?')).toContain('아직 몰라요')
+  expect(said('주말 날씨 어때?')).toMatch(/^· 11월 28일/)
+  expect(said('어제 날씨 어땠지?')).toContain('지난 날씨는 몰라요')
+})

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { requestAssistant } from '../features/assistant/api/requestAssistant'
+import { localAiAvailable, requestAssistant } from '../features/assistant/api/requestAssistant'
 import { requestChat } from '../features/assistant/api/requestChat'
 import { parseInput, parseShared } from '../features/assistant/parseInput'
 import { diaryEntry } from '../features/assistant/diary'
@@ -84,6 +84,7 @@ function App() {
   const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [raised, setRaised] = useState(false)
+  const [localAi, setLocalAi] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   const { loaded, settings, events, todos, notes, diaries, talk, bond } = records
@@ -122,6 +123,10 @@ function App() {
       }),
     [],
   )
+
+  useEffect(() => {
+    void localAiAvailable().then(setLocalAi)
+  }, [])
 
   useEffect(() => {
     latestState.current = state
@@ -213,7 +218,10 @@ function App() {
       const reply = await writeDiary(diaryEntry(state, talk))
       settle(exchange, { reply })
     } else if (known.action?.type === 'loadWeather') {
-      const reply = await enableWeather().catch((error: Error) => error.message)
+      const reply = await enableWeather().then(
+        (today) => answer(input, { ...source, weather: today }).text,
+        (error: Error) => error.message,
+      )
       settle(exchange, { reply })
     } else {
       settle(exchange)
@@ -348,9 +356,8 @@ function App() {
     await requestWeatherPermission()
     const today = await getTodayWeather()
     setWeather(today)
-    const spokenWeather = weatherLine(today, new Date())
-    setLine(spokenWeather)
-    return spokenWeather.title
+    setLine(weatherLine(today, new Date()))
+    return today
   }
 
   return (
@@ -414,6 +421,7 @@ function App() {
             <Conversation
               exchanges={conversation}
               connected={sync.connected}
+              localAi={localAi}
               now={now}
               thinking={thinking}
               onAskAi={(exchange) => void askAi(exchange)}

@@ -1,6 +1,8 @@
 import { recall, type Recalled } from '../recall/recall'
 import type { AssistantRecord } from '../records/types'
-import { diaryBody, formatTime, localDate, weatherLine, type DayState } from './speech'
+import type { TodayWeather } from '../online/weather'
+import { findDay } from './days'
+import { diaryBody, forecastText, formatTime, localDate, weatherLine, type DayState } from './speech'
 
 export interface Answer {
   /** 또리가 짧게 하는 말. */
@@ -97,8 +99,7 @@ export function answer(question: string, source: AnswerSource): Answer {
     if (!weather) {
       return { direct: true, title: '잠깐만요.', text: '날씨를 확인하고 있어요.', action: { type: 'loadWeather' } }
     }
-    const line = weatherLine(weather, now)
-    return { direct: true, title: '날씨 봤어요.', text: `${line.title} ${line.body}` }
+    return { direct: true, title: '날씨 봤어요.', text: weatherAnswer(text, weather, now) }
   }
 
   if (/^(?:지금\s*)?(?:몇\s*시|시간)/.test(text)) return { direct: true, ...same(`지금은 ${formatTime(now)}이에요.`) }
@@ -120,6 +121,24 @@ export function answer(question: string, source: AnswerSource): Answer {
   }
   if (/일정|약속|스케줄|할\s*일/.test(text)) return same('거기엔 아무것도 없어요.')
   return { title: '그건 잘 몰라요.', text: '제가 아는 것 중에는 없어요.', unknown: true }
+}
+
+function weatherAnswer(text: string, weather: TodayWeather, now: Date): string {
+  const days = weather.days ?? []
+  if (/어제|그제|지난/.test(text)) return '지난 날씨는 몰라요. 오늘부터 일주일까지만 볼 수 있어요.'
+  if (/주말|(?:이번|다음)\s*주(?!\s*[월화수목금토일]요일)|일주일/.test(text)) {
+    const weekend = /주말/.test(text)
+    const listed = days.filter(({ date }) => !weekend || [0, 6].includes(new Date(`${date}T00:00`).getDay()))
+    if (listed.length) return listed.map((day) => `· ${forecastText(day, now)}`).join('\n')
+  }
+  const date = findDay(text, now)?.date
+  if (date && localDate(date) !== localDate(now)) {
+    const day = days.find((item) => item.date === localDate(date))
+    return day ? forecastText(day, now) : '그날 날씨는 아직 몰라요. 일주일 안쪽만 볼 수 있어요.'
+  }
+  const { title, body } = weatherLine(weather, now)
+  const today = days.find((item) => item.date === localDate(now))
+  return today ? `${title} 오늘은 ${today.low}°에서 ${today.high}°예요. ${body}` : `${title} ${body}`
 }
 
 function same(text: string): Answer {

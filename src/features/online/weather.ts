@@ -1,7 +1,16 @@
 import { Geolocation } from '@capacitor/geolocation'
+import { localDate } from '../assistant/speech'
 import { findPlace } from './place'
 
 export type Sky = 'sun' | 'moon' | 'cloud' | 'snow' | 'rain'
+
+export interface DayForecast {
+  date: string
+  sky: Sky
+  low: number
+  high: number
+  rainAt: Date | null
+}
 
 export interface TodayWeather {
   sky: Sky
@@ -10,11 +19,19 @@ export interface TodayWeather {
   place: string
   temperature: number
   rainAt: Date | null
+  /** 오늘부터 하루씩. */
+  days?: DayForecast[]
 }
 
 interface OpenMeteoResponse {
   current: { temperature_2m: number; weather_code: number; is_day: number }
   hourly: { time: number[]; weather_code: number[] }
+  daily: {
+    time: number[]
+    weather_code: number[]
+    temperature_2m_min: number[]
+    temperature_2m_max: number[]
+  }
 }
 
 const HOUR = 3_600_000
@@ -56,7 +73,8 @@ export async function getTodayWeather(now = new Date()): Promise<TodayWeather> {
     longitude: position.coords.longitude.toFixed(2),
     current: 'temperature_2m,weather_code,is_day',
     hourly: 'weather_code',
-    forecast_days: '2',
+    daily: 'weather_code,temperature_2m_min,temperature_2m_max',
+    forecast_days: '7',
     timeformat: 'unixtime',
     timezone: 'auto',
   })
@@ -67,17 +85,29 @@ export async function getTodayWeather(now = new Date()): Promise<TodayWeather> {
   if (!response?.ok) throw new Error('날씨 서버에서 응답을 받지 못했습니다.')
 
   const data = (await response.json()) as OpenMeteoResponse
-  const endOfDay = new Date(now).setHours(24, 0, 0, 0)
-  const rainIndex = data.hourly.time.findIndex((time, index) => {
-    const at = time * 1000
-    return at + HOUR > now.getTime() && at < endOfDay && isRain(data.hourly.weather_code[index])
-  })
+  const rainBetween = (from: number, to: number) => {
+    const index = data.hourly.time.findIndex((time, hour) => {
+      const at = time * 1000
+      return at + HOUR > from && at < to && isRain(data.hourly.weather_code[hour])
+    })
+    return index < 0 ? null : new Date(data.hourly.time[index] * 1000)
+  }
   return {
     sky: skyOf(data.current.weather_code, data.current.is_day === 1),
     isDay: data.current.is_day === 1,
     place,
     temperature: Math.round(data.current.temperature_2m),
-    rainAt: rainIndex < 0 ? null : new Date(data.hourly.time[rainIndex] * 1000),
+    rainAt: rainBetween(now.getTime(), new Date(now).setHours(24, 0, 0, 0)),
+    days: data.daily.time.map((time, index) => {
+      const start = time * 1000
+      return {
+        date: localDate(new Date(start)),
+        sky: skyOf(data.daily.weather_code[index]),
+        low: Math.round(data.daily.temperature_2m_min[index]),
+        high: Math.round(data.daily.temperature_2m_max[index]),
+        rainAt: rainBetween(Math.max(start, now.getTime()), new Date(start).setHours(24, 0, 0, 0)),
+      }
+    }),
   }
 }
 

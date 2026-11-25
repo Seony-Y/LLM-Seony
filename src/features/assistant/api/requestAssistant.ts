@@ -1,10 +1,21 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 
 interface LocalLlmPlugin {
+  available(): Promise<{ available: boolean }>
   chat(options: { prompt: string }): Promise<{ text: string }>
 }
 
 const localLlm = registerPlugin<LocalLlmPlugin>('LocalLlm')
+
+/** 모델을 뺀 앱이나 물어볼 수 없는 예전 앱에서는 쓸 수 없는 것으로 본다. */
+export async function localAiAvailable(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false
+  try {
+    return (await localLlm.available()).available
+  } catch {
+    return false
+  }
+}
 
 interface Persona {
   assistantName: string
