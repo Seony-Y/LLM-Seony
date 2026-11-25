@@ -1,3 +1,4 @@
+import { openTodos } from '../assistant/speech'
 import type { AssistantRecord } from '../records/types'
 import { askedWords, words } from './words'
 
@@ -5,8 +6,10 @@ export interface Recalled {
   id: string
   kind: 'event' | 'todo' | 'note'
   text: string
-  /** 일정은 시작 시각, 나머지는 맡긴 시각. */
+  /** 일정은 시작 시각, 할 일은 할 날, 나머지는 맡긴 시각. */
   at: string
+  /** at이 할 날이다. */
+  due?: boolean
 }
 
 export interface RecallSource {
@@ -31,7 +34,10 @@ export function recall(question: string, source: RecallSource): Recalled[] {
 
   if (keywords.length === 0) {
     if (/할\s*일/.test(question)) {
-      return source.todos.filter(({ data }) => !data.doneAt).slice(0, LIMIT).map(fromTodo)
+      return openTodos(source.todos)
+        .map(fromTodo)
+        .filter(({ at, due }) => !range || !due || (Date.parse(at) >= range.from && Date.parse(at) < range.to))
+        .slice(0, LIMIT)
     }
     if (range || /일정|약속|스케줄/.test(question)) {
       const from = range?.from ?? source.now.getTime()
@@ -127,5 +133,6 @@ function fromEvent({ id, data }: AssistantRecord<'event'>): Recalled {
 }
 
 function fromTodo({ id, data, createdAt }: AssistantRecord<'todo'>): Recalled {
-  return { id, kind: 'todo', text: data.title, at: createdAt }
+  const due = data.dueDate && new Date(`${data.dueDate}T00:00`).toISOString()
+  return { id, kind: 'todo', text: data.title, at: due || createdAt, due: Boolean(due) }
 }

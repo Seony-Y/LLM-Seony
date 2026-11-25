@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">또리</string>
-    <string name="title_activity_main">또리</string>
+    <string name="app_name">Leaf</string>
+    <string name="title_activity_main">Leaf</string>
     <string name="widget_description">또리의 말과 다음 일정을 홈 화면에서 봅니다.</string>
     <string name="widget_empty">또리예요.</string>
     <string name="widget_empty_body">눌러서 앱을 한 번 열어주세요.</string>

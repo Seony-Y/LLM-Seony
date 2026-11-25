@@ -8,7 +8,7 @@ let env: Env
 let dispose: () => Promise<void>
 
 beforeAll(async () => {
-  const proxy = await getPlatformProxy<Env>({ persist: false })
+  const proxy = await getPlatformProxy<Env>({ persist: false, remoteBindings: false })
   env = { ...proxy.env, ACCESS_KEY: KEY }
   dispose = proxy.dispose
   const files = readdirSync('server/migrations').sort()
@@ -127,4 +127,31 @@ test('매일 백업을 만들고 다시 읽을 수 있다', async () => {
   expect(saved.version).toBe(1)
   expect(saved.records[0]).toMatchObject({ id: 'a', kind: 'todo', createdAt: '2026-01-01T00:00:00.000Z' })
   expect((await call('backups/2020-01-01')).status).toBe(404)
+})
+
+test('대화는 비밀 키가 있을 때만 AI에게 넘긴다', async () => {
+  const asked: unknown[] = []
+  const AI = {
+    run: async (_model: string, input: object) => {
+      asked.push((input as { messages: unknown }).messages)
+      return { choices: [{ message: { content: ' 안녕하세요. ' } }] }
+    },
+  }
+  const send = (body: unknown, key = KEY) =>
+    call('chat', { method: 'POST', body: JSON.stringify(body) }, key, { ...env, AI })
+  const messages = [{ role: 'user', content: '안녕' }]
+
+  expect(await (await send(messages)).json()).toEqual({ text: '안녕하세요.' })
+  expect(asked).toEqual([messages])
+  expect((await send(messages, 'x'.repeat(40))).status).toBe(401)
+  expect((await send([{ role: 'tool', content: '' }])).status).toBe(400)
+  expect((await send([])).status).toBe(400)
+  expect((await send([{ role: 'user', content: 'a'.repeat(30_001) }])).status).toBe(413)
+  expect(asked).toHaveLength(1)
+})
+
+test('AI가 실패하면 502로 알린다', async () => {
+  const AI = { run: () => Promise.reject(new Error('한도 초과')) }
+  const body = JSON.stringify([{ role: 'user', content: '안녕' }])
+  expect((await call('chat', { method: 'POST', body }, KEY, { ...env, AI })).status).toBe(502)
 })

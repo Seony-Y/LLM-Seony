@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
+import { requestChat } from '../features/assistant/api/requestChat'
 import { parseInput, parseShared } from '../features/assistant/parseInput'
-import { answer, chat } from '../features/assistant/answer'
+import { answer, chat, type Answer, type AnswerSource } from '../features/assistant/answer'
 import { pendingDiaries } from '../features/assistant/diary'
 import { greeting, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
 import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
@@ -21,10 +23,12 @@ import type { RoomTarget } from '../features/room/diorama'
 import { useUpdate } from '../features/update/useUpdate'
 import { onWidgetPrompt, updateWidget } from '../features/widget/roomWidget'
 import { buildTimeline } from '../features/widget/timeline'
-import { ConfirmCard, type Draft } from './ConfirmCard'
+import { AddForm, type AddKind } from './AddForm'
+import type { Draft } from './ConfirmCard'
 import { Conversation, type Exchange } from './Conversation'
 import { RecordList, type View } from './RecordList'
 import { Settings } from './Settings'
+import { useViewport } from './useViewport'
 import './app.css'
 
 const MINUTE = 60_000
@@ -63,13 +67,13 @@ const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
 ]
 
 function App() {
+  useViewport()
   const records = useRecords()
   const sync = useSync(records.pending)
   const now = useNow()
   const [weather, setWeather] = useState<TodayWeather | null>(null)
-  const [view, setView] = useState<View>('event')
+  const [view, changeView] = useState<View>('event')
   const [prompt, setPrompt] = useState('')
-  const [draft, setDraft] = useState<{ id: number; value: Draft } | null>(null)
   const [line, setLine] = useState<Line | null>(null)
   const [pokes, setPokes] = useState(0)
   const [hops, setHops] = useState(0)
@@ -77,6 +81,7 @@ function App() {
   const [thinking, setThinking] = useState(false)
   const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [raised, setRaised] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   const { loaded, settings, events, todos, notes, diaries, bond } = records
@@ -97,9 +102,10 @@ function App() {
       onSharedText((text) => {
         const parsed = parseShared(text)
         if (parsed.type === 'question') return
-        setView(parsed.type === 'note' ? 'note' : 'event')
-        setDraft({ id: Date.now(), value: parsed })
-        setLine({ title: '이거 맡길까요?', body: '공유받은 글이에요. 고쳐서 넣어도 돼요.' })
+        changeView('talk')
+        setRaised(true)
+        addExchange({ question: text, reply: '공유받은 글이에요. 고쳐서 넣어도 돼요.', proposal: parsed })
+        setLine({ title: '이거 맡길까요?', body: '아래에서 골라주세요.' })
       }),
     [],
   )
@@ -152,7 +158,17 @@ function App() {
     return () => clearTimeout(timer)
   }, [loaded, bond.level, bond.name, bond.gift])
 
-  useEffect(() => onWidgetPrompt(() => promptInput.current?.focus()), [])
+  useEffect(
+    () =>
+      onWidgetPrompt(() => {
+        flushSync(() => {
+          changeView('talk')
+          setRaised(true)
+        })
+        promptInput.current?.focus()
+      }),
+    [],
+  )
 
   useEffect(() => {
     if (!loaded) return
@@ -161,43 +177,56 @@ function App() {
     }
   }, [loaded, state, diaries])
 
+  /** 대화를 시작하면 시트를 올리고, 다른 기록으로 가면 내린다. */
+  function setView(next: View) {
+    if (next !== view) setRaised(next === 'talk')
+    changeView(next)
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     const input = prompt.trim()
     if (!input || thinking) return
     const parsed = parseInput(input)
     setPrompt('')
-    if (view === 'talk' && parsed.type !== 'question' && parsed.type !== 'note') {
-      setDraft(null)
+    if (parsed.type !== 'question' && (parsed.type !== 'note' || parsed.explicit)) {
       addExchange({ question: input, reply: proposalText(parsed), proposal: parsed })
       setLine({ title: '맡기는 거예요?', body: '아래에서 골라주세요.' })
       return
     }
-    if (view !== 'talk' && parsed.type !== 'question') {
-      setDraft({ id: Date.now(), value: parsed })
-      setLine({ title: '이렇게 이해했어요.', body: '틀린 데가 있으면 고쳐도 돼요.' })
-      return
-    }
 
-    setDraft(null)
-    setView('talk')
-    const reply =
-      parsed.type === 'question' ? answer(input, { ...state, notes, diaries }) : chat(input, state)
-    const id = addExchange({
-      question: input,
-      reply: reply.text,
-      items: reply.items,
-      unknown: reply.unknown,
-    })
-    setLine({ title: reply.title, body: reply.title === reply.text ? '' : '아래에 적어뒀어요.' })
+    const source = { ...state, diaries }
+    const known = parsed.type === 'question' ? answer(input, source) : chat(input, state)
+    if (!known.direct && sync.connected) return talk(input, known, source)
+
+    const id = addExchange(toExchange(input, known))
+    setLine({ title: known.title, body: known.title === known.text ? '' : '아래에 적어뒀어요.' })
     setHops((count) => count + 1)
-
-    if (reply.action?.type === 'writeDiary') {
-      const { date, body } = reply.action
+    if (known.action?.type === 'writeDiary') {
+      const { date, body } = known.action
       await saveRecord('diary', { date, body }, `diary-${date}`)
-    } else if (reply.action?.type === 'loadWeather') {
+    } else if (known.action?.type === 'loadWeather') {
       const text = await enableWeather().catch((error: Error) => error.message)
       updateExchange(id, { reply: text })
+    }
+  }
+
+  /** 연결이 안 되면 앱이 아는 것으로 답한다. */
+  async function talk(input: string, known: Answer, source: AnswerSource) {
+    const id = addExchange({ question: input, reply: '…' })
+    setThinking(true)
+    setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
+    try {
+      const reply = await requestChat(sync.accessKey, input, exchanges.toReversed(), source)
+      updateExchange(id, { reply })
+      setLine({ title: '듣고 있어요.', body: '' })
+      setHops((count) => count + 1)
+    } catch (error) {
+      console.warn(error)
+      updateExchange(id, toExchange(input, known))
+      setLine({ title: known.title, body: '지금은 연결이 잘 안 돼요.' })
+    } finally {
+      setThinking(false)
     }
   }
 
@@ -207,12 +236,9 @@ function App() {
     return id
   }
 
-  function acceptProposal({ id, proposal }: Exchange) {
-    if (!proposal) return
-    updateExchange(id, { proposal: undefined })
-    setView(proposal.type === 'todo' ? 'todo' : 'event')
-    setDraft({ id: Date.now(), value: proposal })
-    setLine({ title: '이렇게 이해했어요.', body: '틀린 데가 있으면 고쳐도 돼요.' })
+  async function confirmProposal({ id }: Exchange, value: Draft) {
+    await confirm(value)
+    updateExchange(id, { reply: confirmedText(value), proposal: undefined })
   }
 
   function updateExchange(id: number, change: Partial<Exchange>) {
@@ -224,7 +250,7 @@ function App() {
     setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
     try {
       const reply = await requestAssistant(question, settings)
-      updateExchange(id, { reply, unknown: false, fromAi: true })
+      updateExchange(id, { reply, unknown: false })
       setLine({ title: '생각해봤어요.', body: '아래에 적어뒀어요.' })
     } catch (error) {
       updateExchange(id, { reply: error instanceof Error ? error.message : '다시 물어봐 주세요.' })
@@ -232,12 +258,6 @@ function App() {
     } finally {
       setThinking(false)
     }
-  }
-
-  async function keep({ id, question }: Exchange) {
-    await saveRecord('note', { body: question })
-    updateExchange(id, { reply: '기억해 뒀어요.', unknown: false })
-    setLine({ title: '기억해 뒀어요.', body: '나중에 물어보면 찾아줄게요.' })
   }
 
   async function scheduleReminders() {
@@ -256,26 +276,32 @@ function App() {
       case 'event': {
         const { title, startsAt } = value
         await saveRecord('event', { title, note: '', startsAt: startsAt.toISOString(), remind: true })
-        setView('event')
         // 저장은 알림 권한과 상관없이 끝낸다.
         void scheduleReminders().catch(console.error)
         break
       }
       case 'todo':
-        await saveRecord('todo', { title: value.title, doneAt: null })
-        setView('todo')
+        await saveRecord('todo', { title: value.title, doneAt: null, dueDate: value.dueDate })
         break
       case 'note':
         await saveRecord('note', { body: value.body })
-        setView('note')
     }
-    setDraft(null)
     setHops((count) => count + 1)
     setLine(
       value.type === 'message' || value.type === 'call'
         ? { title: '여기까지예요.', body: '마지막은 직접 눌러주세요.' }
         : { title: '챙겨뒀어요.', body: `잊어버려도 괜찮아요, ${settings.userName}.` },
     )
+  }
+
+  function celebrateAdd(kind: AddKind) {
+    setHops((count) => count + 1)
+    setLine(
+      kind === 'note'
+        ? { title: '기억해 뒀어요.', body: '나중에 물어보면 찾아줄게요.' }
+        : { title: '챙겨뒀어요.', body: `잊어버려도 괜찮아요, ${settings.userName}.` },
+    )
+    if (kind === 'event') void scheduleReminders().catch(console.error)
   }
 
   function tapRoom(target: RoomTarget) {
@@ -332,41 +358,18 @@ function App() {
         <Room scene={scene} sky={weather?.sky ?? 'cloud'} bondLevel={bond.level} hops={hops} cheers={cheers} onTap={tapRoom} />
       </section>
 
-      <section className="panel">
-        <form className="prompt" onSubmit={submit}>
-          <input
-            ref={promptInput}
-            aria-label="비서에게 맡길 일"
-            autoComplete="off"
-            enterKeyHint="send"
-            maxLength={2000}
-            placeholder={
-              view === 'talk'
-                ? `${settings.assistantName}와 이야기해요`
-                : `${settings.assistantName}에게 슬쩍 말해보세요`
-            }
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-          />
-          <button type="submit" aria-label="맡기기" disabled={thinking}>
-            <svg width="22" height="22" viewBox="0 0 24 24">
-              <path d="M12 19V5M6 11l6-6 6 6" />
-            </svg>
-          </button>
-        </form>
-
-        {draft && view !== 'talk' && (
-          <ConfirmCard
-            key={draft.id}
-            draft={draft.value}
-            onConfirm={confirm}
-            onCancel={() => {
-              setDraft(null)
-              setLine({ title: '알겠어요.', body: '못 들은 걸로 할게요.' })
-            }}
-          />
-        )}
-
+      <section className={raised ? 'panel raised' : 'panel'}>
+        <button
+          className="sheet-handle"
+          type="button"
+          aria-expanded={raised}
+          aria-label={raised ? '내리기' : '올리기'}
+          onClick={() => setRaised(!raised)}
+        >
+          <svg width="28" height="14" viewBox="0 0 28 14">
+            <path d={raised ? 'M6 4l8 6 8-6' : 'M6 10l8-6 8 6'} />
+          </svg>
+        </button>
         <nav aria-label="기록">
           {VIEWS.map((item) => (
             <button
@@ -383,15 +386,19 @@ function App() {
           ))}
         </nav>
 
-        <div>
+        <div className="scroll" key={view}>
           {view === 'talk' ? (
             <Conversation
               exchanges={exchanges}
+              connected={sync.connected}
               now={now}
               thinking={thinking}
               onAskAi={(exchange) => void askAi(exchange)}
-              onKeep={(exchange) => void keep(exchange).catch(console.error)}
-              onAccept={acceptProposal}
+              onConfirm={confirmProposal}
+              onDecline={({ id }) => {
+                updateExchange(id, { reply: '알겠어요. 안 넣을게요.', proposal: undefined })
+                setLine({ title: '알겠어요.', body: '못 들은 걸로 할게요.' })
+              }}
               onRemove={({ id }) => setExchanges((list) => list.filter((item) => item.id !== id))}
               onClear={() => {
                 setExchanges([])
@@ -412,6 +419,27 @@ function App() {
           )}
         </div>
 
+        {view === 'talk' ? (
+          <form className="prompt" onSubmit={submit}>
+            <input
+              ref={promptInput}
+              aria-label="비서에게 할 말"
+              autoComplete="off"
+              enterKeyHint="send"
+              maxLength={2000}
+              placeholder={`${settings.assistantName}와 이야기해요`}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+            />
+            <button type="submit" aria-label="보내기" disabled={thinking}>
+              <svg width="22" height="22" viewBox="0 0 24 24">
+                <path d="M12 19V5M6 11l6-6 6 6" />
+              </svg>
+            </button>
+          </form>
+        ) : (
+          view !== 'diary' && <AddForm key={`add-${view}`} kind={view} onAdded={celebrateAdd} />
+        )}
       </section>
       <Settings
         records={records}
@@ -445,14 +473,29 @@ function objectParticle(word: string) {
   return (word.charCodeAt(word.length - 1) - 0xac00) % 28 ? '을' : '를'
 }
 
+function toExchange(question: string, { text, items, unknown }: Answer) {
+  return { question, reply: text, items, unknown }
+}
+
+function confirmedText(draft: Draft) {
+  switch (draft.type) {
+    case 'event':
+      return '일정에 넣어뒀어요.'
+    case 'todo':
+      return '할 일에 넣어뒀어요.'
+    case 'note':
+      return '기억해 뒀어요.'
+    default:
+      return '열어뒀어요. 마지막은 직접 눌러주세요.'
+  }
+}
+
 function proposalText(draft: Draft) {
   switch (draft.type) {
-    case 'event': {
-      const when = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
-      return `일정으로 넣을까요?\n${when.format(draft.startsAt)} ${draft.title}`
-    }
+    case 'event':
+      return '일정으로 넣을까요?'
     case 'todo':
-      return `할 일에 넣을까요?\n${draft.title}`
+      return '할 일에 넣을까요?'
     case 'message':
       return `${draft.recipient}에게 보낼 글을 써볼까요?`
     case 'call':

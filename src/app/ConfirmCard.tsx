@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { localDate } from '../features/assistant/speech'
 import type { ParsedInput } from '../features/assistant/parseInput'
+import { formatInputTime, nextHour } from './dates'
 
 export type Draft = Exclude<ParsedInput, { type: 'question' }>
 
@@ -18,6 +19,9 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
   const [startsAt, setStartsAt] = useState(
     toInputValue(draft.type === 'event' ? draft.startsAt : nextHour()),
   )
+  const [dueDate, setDueDate] = useState(
+    (draft.type === 'todo' && draft.dueDate) || localDate(new Date()),
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const isRecord = type === 'event' || type === 'todo' || type === 'note'
@@ -29,11 +33,12 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
     if (!value && !emptyAllowed) return setError('내용을 적어주세요.')
     const date = new Date(startsAt)
     if (type === 'event' && !(date > new Date())) return setError('앞으로 올 시간을 골라주세요.')
+    if (type === 'todo' && !dueDate) return setError('날짜를 골라주세요.')
 
     setBusy(true)
     setError('')
     try {
-      await onConfirm(build(draft, type, value, date))
+      await onConfirm(build(draft, type, value, date, dueDate))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '처리하지 못했어요.')
       setBusy(false)
@@ -65,6 +70,14 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
           type="datetime-local"
           value={startsAt}
           onChange={(event) => setStartsAt(event.target.value)}
+        />
+      )}
+      {type === 'todo' && (
+        <input
+          aria-label="언제까지"
+          type="date"
+          value={dueDate}
+          onChange={(event) => setDueDate(event.target.value)}
         />
       )}
       {error && <p role="alert">{error}</p>}
@@ -99,21 +112,20 @@ function draftText(draft: Draft) {
   return draft.type === 'note' ? draft.body : draft.title
 }
 
-function build(draft: Draft, type: Draft['type'], value: string, startsAt: Date): Draft {
+function build(
+  draft: Draft,
+  type: Draft['type'],
+  value: string,
+  startsAt: Date,
+  dueDate: string,
+): Draft {
   if (draft.type === 'message') return { ...draft, message: value }
   if (draft.type === 'call') return { ...draft, recipient: value }
   if (type === 'event') return { type, title: value, startsAt }
-  if (type === 'todo') return { type, title: value }
+  if (type === 'todo') return { type, title: value, dueDate }
   return { type: 'note', body: value }
 }
 
-function nextHour() {
-  const date = new Date()
-  date.setHours(date.getHours() + 1, 0, 0, 0)
-  return date
-}
-
 function toInputValue(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${localDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return `${localDate(date)}T${formatInputTime(date)}`
 }

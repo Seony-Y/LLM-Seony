@@ -69,7 +69,7 @@ export function useSync(pending: number) {
     setAccessKey('')
   }
 
-  return { connected: accessKey !== '', error, lastSyncedAt, sync, connect, disconnect }
+  return { connected: accessKey !== '', accessKey, error, lastSyncedAt, sync, connect, disconnect }
 }
 
 export type Sync = ReturnType<typeof useSync>

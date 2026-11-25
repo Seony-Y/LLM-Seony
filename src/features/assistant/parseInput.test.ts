@@ -89,3 +89,20 @@ test('공유받은 글은 명령이나 질문으로 보지 않는다', () => {
   expect(parseShared('엄마한테 전화해줘', now).type).toBe('note')
   expect(parseShared('밥 먹었어?', now)).toEqual({ type: 'note', body: '밥 먹었어?' })
 })
+
+test.each([
+  ['내일 영양제 먹기', '영양제 먹기', '2026-11-25'],
+  ['금요일까지 보고서 보내기', '보고서 보내기', '2026-11-27'],
+  ['보고서 내일까지 보내기', '보고서 보내기', '2026-11-25'],
+  ['12월 5일 선물 사기', '선물 사기', '2026-12-05'],
+  ['월요일에 짐 옮기기', '짐 옮기기', '2026-11-30'],
+])('할 날이 있는 할 일: %s', (input, title, dueDate) =>
+  expect(parseInput(input, now)).toEqual({ type: 'todo', title, dueDate }),
+)
+
+test.each([
+  ['주차는 B2 17번 기억해줘', '주차는 B2 17번'],
+  ['민수 생일은 3월 2일이라고 기억해 둬', '민수 생일은 3월 2일'],
+])('기억해 달라는 말: %s', (input, body) =>
+  expect(parseInput(input, now)).toEqual({ type: 'note', body, explicit: true }),
+)
