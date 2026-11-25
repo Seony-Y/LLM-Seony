@@ -4,11 +4,13 @@ interface ConfirmModalProps {
   title: string
   body: string
   confirmLabel: string
+  /** 다른 선택지. */
+  other?: { label: string; onClick: () => void }
   onConfirm: () => void
   onCancel: () => void
 }
 
-export function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }: ConfirmModalProps) {
+export function ConfirmModal({ title, body, confirmLabel, other, onConfirm, onCancel }: ConfirmModalProps) {
   const dialog = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -37,6 +39,11 @@ export function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }:
           <button type="button" onClick={onCancel}>
             취소
           </button>
+          {other && (
+            <button type="button" onClick={other.onClick}>
+              {other.label}
+            </button>
+          )}
           <button className="primary" type="button" onClick={onConfirm}>
             {confirmLabel}
           </button>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { bondOf } from '../bond/bond'
 import { expireTalk } from './talkStore'
 import { importLegacySchedules, isPurged, loadRecords, subscribeRecords } from './recordStore'
+import { expandEvents } from './repeat'
 import { defaultSettings, SETTINGS_ID, type AssistantRecord, type Kind } from './types'
 
 const TRASH_DAYS = 30
@@ -45,7 +46,9 @@ export function useRecords() {
     return {
       loaded: records !== null,
       error,
-      events: ofKind('event').sort((a, b) => a.data.startsAt.localeCompare(b.data.startsAt)),
+      events: expandEvents(ofKind('event'), new Date(loadedAt)).sort((a, b) => a.data.startsAt.localeCompare(b.data.startsAt)),
+      /** 반복 일정이 처음 시작한 때. */
+      seriesStart: (id: string) => ofKind('event').find((event) => event.id === id)?.data.startsAt ?? '',
       todos: ofKind('todo').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       notes: ofKind('note').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       diaries: ofKind('diary').sort((a, b) => b.data.date.localeCompare(a.data.date)),

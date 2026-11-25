@@ -1,10 +1,12 @@
 import { isSmallTalk } from './answer'
 import { DAY_OFFSET, findDay, WEEKDAYS } from './days'
+import { nextDate, repeatOf } from '../records/repeat'
+import type { Repeat } from '../records/types'
 import { localDate } from './speech'
 
 export type ParsedInput =
-  | { type: 'event'; title: string; startsAt: Date }
-  | { type: 'todo'; title: string; dueDate?: string }
+  | { type: 'event'; title: string; startsAt: Date; repeat?: Repeat }
+  | { type: 'todo'; title: string; dueDate?: string; repeat?: Repeat }
   /** explicit은 기억해 달라고 시킨 것. */
   | { type: 'note'; body: string; explicit?: true }
   | { type: 'message'; channel: 'sms' | 'kakao'; recipient: string; message: string }
@@ -26,7 +28,52 @@ const HANGUL_HOURS: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4 }
 const SSANG_SIOT = 20
 const MAX_DELAY = 7 * 24 * 60
 
+const REPEATS: { pattern: RegExp; every: Repeat['every']; keep: string }[] = [
+  { pattern: /(?<![가-힣])(?:매일|날마다)(?:마다)?(?![가-힣])/, every: 'day', keep: '' },
+  { pattern: /(?<![가-힣])평일(?:마다|에)?(?![가-힣])/, every: 'weekday', keep: '' },
+  { pattern: /(?:매주|주마다)\s*([월화수목금토일]요일)(?:마다|에)?/, every: 'week', keep: '$1' },
+  { pattern: /([월화수목금토일]요일)마다/, every: 'week', keep: '$1' },
+  { pattern: /(?<![가-힣])매주(?![가-힣])/, every: 'week', keep: '' },
+  { pattern: /(?:매월|매달|달마다)\s*(\d{1,2})일(?:마다|에)?/, every: 'month', keep: '$1일' },
+  { pattern: /(?<![가-힣])(?:매월|매달)(?![가-힣])/, every: 'month', keep: '' },
+]
+
+/** "매일", "매주 월요일", "매월 25일"을 떼어 읽고 첫 차례를 정한다. */
 export function parseInput(input: string, now = new Date()): ParsedInput {
+  const whole = parseOnce(input, now)
+  const found = REPEATS.find(({ pattern }) => pattern.test(input))
+  if (!found || (whole.type !== 'event' && whole.type !== 'todo')) return whole
+
+  const rest = input
+    .replace(found.pattern, found.keep)
+    .replace(/(?<!월\s*)(?<!\d)(\d{1,2})일(?=\s)/, (text, day: string) => (found.every === 'month' ? monthDay(Number(day), now) : text))
+    .replace(/\s+/g, ' ')
+    .trim()
+  const parsed = parseOnce(rest, now)
+  if (parsed.type === 'event') {
+    let { startsAt } = parsed
+    if (found.every === 'weekday' && [0, 6].includes(startsAt.getDay())) startsAt = nextDate({ every: 'weekday' }, startsAt)
+    return { ...parsed, startsAt, repeat: repeatOf(found.every, startsAt) }
+  }
+  if (parsed.type !== 'todo') return whole
+  let first = parsed.dueDate ? new Date(`${parsed.dueDate}T00:00`) : new Date(now)
+  if (found.every === 'weekday' && [0, 6].includes(first.getDay())) first = nextDate({ every: 'weekday' }, first)
+  return { ...parsed, dueDate: localDate(first), repeat: repeatOf(found.every, first) }
+}
+
+/** 이번 달에 지났거나 없는 날이면 다음에 오는 그날. */
+function monthDay(day: number, now: Date) {
+  const date = new Date(now.getFullYear(), now.getMonth(), 1)
+  for (let tries = 0; tries < 12; tries += 1) {
+    const candidate = new Date(date.getFullYear(), date.getMonth() + tries, day)
+    if (candidate.getDate() === day && localDate(candidate) >= localDate(now)) {
+      return `${candidate.getMonth() + 1}월 ${day}일`
+    }
+  }
+  return `${day}일`
+}
+
+function parseOnce(input: string, now: Date): ParsedInput {
   const text = input.trim().replace(/[.!~]+$/, '').trim()
 
   const message = text.match(
@@ -64,7 +111,7 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
 }
 
 /** 앞으로 올 때를 말하면 지난 일로 보지 않는다. "내일 3시로 잡혔어" */
-const FUTURE = /내일|모레|글피|다음\s*(?:주|달)|이따|(?:분|시간)(?:s*반)?s*(?:뒤|후)|(?:잡혔|잡았|생겼|정해졌|정했|바뀌었|바꼈|옮겼|됐|되었)/
+const FUTURE = /내일|모레|글피|다음\s*(?:주|달)|이따|(?:분|시간)(?:\s*반)?\s*(?:뒤|후)|(?:잡혔|잡았|생겼|정해졌|정했|바뀌었|바꼈|옮겼|됐|되었)/
 const PAST_DAY = /(?<![가-힣])(?:어제|엊그제|그제|그저께|아까|방금|어젯밤|지난)/
 /** 글자에 "ㅆ" 받침이 있고 뒤에 말끝이 오면 지난 일이다. "있다", "하겠다"는 뺀다. */
 const PAST_ENDING = /([가-힣])(?:어요?|다|는데|네요?|지만?|고|더라|거든|음|던|어서|으니까?|습니다|죠|나 ?봐)(?![가-힣])/g

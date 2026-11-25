@@ -1,4 +1,5 @@
 import { openTodos } from '../assistant/speech'
+import { nextOccurrences } from '../records/repeat'
 import type { AssistantRecord } from '../records/types'
 import { askedWords, words } from './words'
 
@@ -42,7 +43,7 @@ export function recall(question: string, source: RecallSource): Recalled[] {
     if (range || /일정|약속|스케줄/.test(question)) {
       const from = range?.from ?? source.now.getTime()
       const to = range?.to ?? Infinity
-      return source.events
+      return (range ? source.events : nextOccurrences(source.events, source.now))
         .map(fromEvent)
         .filter(({ at }) => Date.parse(at) >= from && Date.parse(at) < to)
         .slice(0, LIMIT)
@@ -55,7 +56,7 @@ export function recall(question: string, source: RecallSource): Recalled[] {
   const total = keywords.reduce((sum, word) => sum + word.length, 0)
   const scored = [
     ...source.notes.map(fromNote),
-    ...source.events.map(fromEvent),
+    ...nextOccurrences(source.events, source.now).map(fromEvent),
     ...source.todos.map(fromTodo),
   ]
     .map((item) => {

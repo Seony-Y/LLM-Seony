@@ -189,6 +189,61 @@
   box-shadow: inset 0 -4px 0 #0002;
 }
 
+.editing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 16px;
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.editing button {
+  min-height: 32px;
+  padding: 0 14px;
+}
+
+.repeat {
+  position: relative;
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding-inline: 8px;
+  color: var(--panel-soft);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.repeat select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.row-title {
+  display: block;
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.done .row-title {
+  text-decoration: line-through;
+}
+
+.past summary {
+  min-height: 44px;
+  line-height: 44px;
+  color: var(--panel-soft);
+  font-size: 14px;
+  cursor: pointer;
+}
+
 .add {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -226,6 +281,7 @@
   background: var(--field);
 }
 
+.card select,
 .card input,
 .login input {
   width: 100%;
@@ -350,7 +406,6 @@
 
 .done > div {
   color: var(--panel-soft);
-  text-decoration: line-through;
 }
 
 .due {
@@ -678,6 +733,7 @@
 }
 
 .fields select,
+.card select,
 .when input,
 .card input:is([type='date'], [type='datetime-local']) {
   padding-right: 42px;

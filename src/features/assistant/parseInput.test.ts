@@ -116,3 +116,29 @@ test.each(['내일 3시에 회의 잡혔어', '6시에 회식 생겼어', '오�
   '앞으로의 일은 일정: %s',
   (input) => expect(parseInput(input, now).type).toBe('event'),
 )
+
+test.each([
+  ['매일 8시 운동', '2026-11-24 20 운동', { every: 'day' }],
+  ['평일 오전 9시 출근', '2026-11-25 9 출근', { every: 'weekday' }],
+  ['매주 월요일 10시 주간 회의', '2026-11-30 10 주간 회의', { every: 'week' }],
+  ['금요일마다 오후 6시 운동', '2026-11-27 18 운동', { every: 'week' }],
+  ['매월 25일 오전 10시 월세 확인', '2026-11-25 10 월세 확인', { every: 'month', on: 25 }],
+])('반복 일정: %s', (input, expected, repeat) => {
+  const parsed = parseInput(input, now)
+  if (parsed.type !== 'event') throw new Error(parsed.type)
+  expect(`${localDate(parsed.startsAt)} ${parsed.startsAt.getHours()} ${parsed.title}`).toBe(expected)
+  expect(parsed.repeat).toEqual(repeat)
+})
+
+test.each([
+  ['매일 영양제 먹기', '영양제 먹기', '2026-11-24', { every: 'day' }],
+  ['매주 금요일 보고서 보내기', '보고서 보내기', '2026-11-27', { every: 'week' }],
+  ['매월 5일 월세 내기', '월세 내기', '2026-12-05', { every: 'month', on: 5 }],
+])('반복 할 일: %s', (input, title, dueDate, repeat) =>
+  expect(parseInput(input, now)).toEqual({ type: 'todo', title, dueDate, repeat }),
+)
+
+test('반복하는 말이라도 일정이나 할 일이 아니면 그대로 둔다', () => {
+  expect(parseInput('매일 피곤하다', now).type).toBe('note')
+  expect(parseInput('2시간 반 뒤 약 먹었는지 확인', now).type).toBe('event')
+})
