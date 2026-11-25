@@ -1,4 +1,4 @@
-import type { TodayWeather } from '../online/weather'
+import type { DayForecast, TodayWeather } from '../online/weather'
 import { relatedNotes } from '../recall/recall'
 import type { AssistantRecord, RecordData } from '../records/types'
 
@@ -158,6 +158,18 @@ export function weatherLine({ place, sky, temperature, rainAt }: TodayWeather, n
     title: `${place ? `${place}, ` : ''}지금 ${temperature}°. ${SKY_WORDS[sky]}.`,
     body: later ? `${formatTime(rainAt)}부터 비 온대요. 우산 챙겨요.` : '나갈 때 참고해요.',
   }
+}
+
+/** 하루의 예보. "내일은 흐려요. 2°에서 9°." */
+export function forecastText({ date, sky, low, high, rainAt }: DayForecast, now: Date): string {
+  const day = new Date(`${date}T00:00`)
+  const today = date === localDate(now)
+  const name = today
+    ? '오늘'
+    : new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }).format(day)
+  // 소나기처럼 하루 대표 날씨에 안 잡히는 비도 알린다.
+  const rain = rainAt && rainAt > now ? ` ${formatTime(rainAt)}부터 비 소식이 있어요.` : ''
+  return `${name} ${SKY_WORDS[sky]}. ${low}°에서 ${high}°.${rain}`
 }
 
 export function pokeLine(settings: RecordData['setting'], turn: number, bondLevel = 0): Line {

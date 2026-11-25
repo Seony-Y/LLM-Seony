@@ -106,3 +106,13 @@ test.each([
 ])('기억해 달라는 말: %s', (input, body) =>
   expect(parseInput(input, now)).toEqual({ type: 'note', body, explicit: true }),
 )
+
+test.each(['어제 11시에 잤어', '오늘 3시에 회의했어', '나 7시에 일어났어', '12시 30분에 점심 먹었는데 맛있더라', '아까 2시에 통화함'])(
+  '지난 일은 일정이 아님: %s',
+  (input) => expect(parseInput(input, now).type).toBe('note'),
+)
+
+test.each(['내일 3시에 회의 잡혔어', '6시에 회식 생겼어', '오늘 7시에 약속 있어', '저녁 8시에 운동하겠다', '어제 말한 회의 내일 3시로 바뀌었어'])(
+  '앞으로의 일은 일정: %s',
+  (input) => expect(parseInput(input, now).type).toBe('event'),
+)

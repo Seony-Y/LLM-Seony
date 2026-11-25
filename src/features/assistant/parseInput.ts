@@ -1,4 +1,5 @@
 import { isSmallTalk } from './answer'
+import { DAY_OFFSET, findDay, WEEKDAYS } from './days'
 import { localDate } from './speech'
 
 export type ParsedInput =
@@ -20,10 +21,10 @@ const REMEMBER = /^(.+?)(?:이?라고|다고)?\s*기억해\s*(?:줘|줄래|주�
 /** "감기", "전화기" 같은 이름씨와 섞이지 않게 움직씨만 적는다. */
 const TODO_ENDING =
   /(?:하|사|가|내|찾|들르|보내|먹|마시|챙기|읽|쓰|보|받|넣|빼|주|맡기|고치|바꾸|만들|치우|버리|끄|켜|걸|씻|닦|돌리|널|옮기|올리|정리하|준비하)기$|(?:예약|해야지?|할 것)$|야\s*(?:해|돼|함|됨)$/
-const WEEKDAYS = '월화수목금토일'
 const HANGUL_HOURS: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4 }
+/** 한글 받침 순서에서 "ㅆ"의 자리. */
+const SSANG_SIOT = 20
 const MAX_DELAY = 7 * 24 * 60
-const DAY_OFFSET: Record<string, number> = { 오늘: 0, 내일: 1, 모레: 2, 글피: 3 }
 
 export function parseInput(input: string, now = new Date()): ParsedInput {
   const text = input.trim().replace(/[.!~]+$/, '').trim()
@@ -49,7 +50,7 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
   if (remember) return { type: 'note', body: remember[1].trim(), explicit: true }
 
   if (isSmallTalk(text) || ASKING_ENDING.test(text)) return { type: 'question', text }
-  const event = parseEvent(text, now)
+  const event = isPast(text) ? null : parseEvent(text, now)
   if (event) return event
   if (REQUEST_ENDING.test(text)) return { type: 'question', text }
   if (text.endsWith('?')) return { type: 'question', text }
@@ -60,6 +61,20 @@ export function parseInput(input: string, now = new Date()): ParsedInput {
     return { type: 'todo', title, dueDate: localDate(day.date) }
   }
   return { type: 'note', body: text }
+}
+
+/** 앞으로 올 때를 말하면 지난 일로 보지 않는다. "내일 3시로 잡혔어" */
+const FUTURE = /내일|모레|글피|다음\s*(?:주|달)|이따|(?:분|시간)(?:s*반)?s*(?:뒤|후)|(?:잡혔|잡았|생겼|정해졌|정했|바뀌었|바꼈|옮겼|됐|되었)/
+const PAST_DAY = /(?<![가-힣])(?:어제|엊그제|그제|그저께|아까|방금|어젯밤|지난)/
+/** 글자에 "ㅆ" 받침이 있고 뒤에 말끝이 오면 지난 일이다. "있다", "하겠다"는 뺀다. */
+const PAST_ENDING = /([가-힣])(?:어요?|다|는데|네요?|지만?|고|더라|거든|음|던|어서|으니까?|습니다|죠|나 ?봐)(?![가-힣])/g
+
+function isPast(text: string) {
+  if (FUTURE.test(text)) return false
+  if (PAST_DAY.test(text)) return true
+  return [...text.matchAll(PAST_ENDING)].some(
+    ([, stem]) => !/[있겠]/.test(stem) && (stem.charCodeAt(0) - 0xac00) % 28 === SSANG_SIOT,
+  )
 }
 
 const SHARED_TITLE = 100
@@ -102,27 +117,6 @@ function parseDelay(text: string, now: Date): ParsedInput | null {
     startsAt.setMinutes(startsAt.getMinutes() + 1, 0, 0)
   }
   return { type: 'event', title: toTitle(text.replace(matched, ' ')), startsAt }
-}
-
-/** "내일", "금요일까지", "12월 5일"을 앞으로 올 날로 읽는다. */
-function findDay(text: string, now: Date): { matched: string; date: Date } | null {
-  const date = text.match(/(\d{1,2})월\s*(\d{1,2})일(?:까지|에)?/)
-  const relative = text.match(/(?<![가-힣])(오늘|내일|모레|글피)(?:까지|에)?(?![가-힣])/)
-  const weekday = text.match(/(?:(이번|다음)\s*주\s*)?([월화수목금토일])요일(?:까지|에)?/)
-  const day = new Date(now)
-  if (date) {
-    day.setMonth(Number(date[1]) - 1, Number(date[2]))
-    if (day.getMonth() !== Number(date[1]) - 1) return null
-    if (localDate(day) < localDate(now)) day.setFullYear(day.getFullYear() + 1)
-  } else if (relative) {
-    day.setDate(now.getDate() + DAY_OFFSET[relative[1]])
-  } else if (weekday) {
-    let offset = WEEKDAYS.indexOf(weekday[2]) - ((now.getDay() + 6) % 7)
-    if (weekday[1] === '다음' || offset < 0) offset += 7
-    day.setDate(now.getDate() + offset)
-  }
-  const found = date ?? relative ?? weekday
-  return found && { matched: found[0], date: day }
 }
 
 function parseClock(text: string, now: Date): ParsedInput | null {

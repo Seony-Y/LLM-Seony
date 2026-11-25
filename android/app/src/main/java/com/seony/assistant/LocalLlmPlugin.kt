@@ -39,6 +39,13 @@ class LocalLlmPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun available(call: PluginCall) {
+        val prepared = File(File(context.filesDir, "models"), MODEL_FILE).length() > 0
+        val bundled = context.assets.list("models")?.contains(MODEL_FILE) == true
+        call.resolve(JSObject().put("available", prepared || bundled))
+    }
+
+    @PluginMethod
     fun chat(call: PluginCall) {
         val prompt = call.getString("prompt")?.trim()
         if (prompt.isNullOrEmpty()) {
