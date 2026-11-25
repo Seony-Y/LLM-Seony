@@ -1,14 +1,12 @@
 import { Capacitor } from '@capacitor/core'
 import { useEffect, useRef, useState } from 'react'
+import type { Turn } from '../features/records/types'
 import type { Recalled } from '../features/recall/recall'
 import { ConfirmCard, type Draft } from './ConfirmCard'
 import { ConfirmModal } from './ConfirmModal'
 import { formatDay } from './dates'
 
-export interface Exchange {
-  id: number
-  question: string
-  reply: string
+export interface Exchange extends Turn {
   items?: Recalled[]
   /** 모르는 말이라 다음에 할 일을 고를 수 있다. */
   unknown?: boolean
@@ -121,7 +119,7 @@ export function Conversation({
       {clearing && (
         <ConfirmModal
           title="대화를 모두 지울까요?"
-          body="기억이나 일정으로 맡긴 것은 그대로 남아요."
+          body="다른 기기에서도 지워져요. 맡긴 일정, 할 일, 기억과 일기는 남아요."
           confirmLabel="지우기"
           onCancel={() => setClearing(false)}
           onConfirm={() => {

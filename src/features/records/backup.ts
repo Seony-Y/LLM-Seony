@@ -5,7 +5,7 @@ import { database } from './db'
 import { loadRecords, notifyRecords } from './recordStore'
 import type { AssistantRecord } from './types'
 
-const KINDS = ['event', 'todo', 'note', 'diary', 'setting']
+const KINDS = ['event', 'todo', 'note', 'diary', 'talk', 'setting']
 
 export async function exportBackup(): Promise<void> {
   const exportedAt = new Date().toISOString()

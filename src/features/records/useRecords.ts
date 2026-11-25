@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { bondOf } from '../bond/bond'
+import { expireTalk } from './talkStore'
 import { importLegacySchedules, isPurged, loadRecords, subscribeRecords } from './recordStore'
 import { defaultSettings, SETTINGS_ID, type AssistantRecord, type Kind } from './types'
 
@@ -22,7 +23,10 @@ export function useRecords() {
         .catch(() => active && setError('기기에 저장된 기록을 열지 못했습니다.'))
     const unsubscribe = subscribeRecords(refresh)
     void navigator.storage?.persist?.().catch(() => false)
-    void importLegacySchedules().catch(console.error).then(refresh)
+    void importLegacySchedules()
+      .then(() => expireTalk(new Date()))
+      .catch(console.error)
+      .then(refresh)
     return () => {
       active = false
       unsubscribe()
@@ -45,10 +49,13 @@ export function useRecords() {
       todos: ofKind('todo').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       notes: ofKind('note').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       diaries: ofKind('diary').sort((a, b) => b.data.date.localeCompare(a.data.date)),
+      talk: ofKind('talk')
+        .flatMap(({ data }) => data.turns)
+        .sort((a, b) => a.at.localeCompare(b.at)),
       settings: { ...defaultSettings, ...saved?.data },
       trash: all.filter(
         (record) =>
-          record.deletedAt && Date.parse(record.deletedAt) > oldest && !isPurged(record),
+          record.kind !== 'talk' && record.deletedAt && Date.parse(record.deletedAt) > oldest && !isPurged(record),
       ),
       bond: bondOf(all),
       pending: all.filter(({ dirty }) => dirty).length,

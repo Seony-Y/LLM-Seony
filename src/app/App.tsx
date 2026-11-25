@@ -3,8 +3,8 @@ import { flushSync } from 'react-dom'
 import { requestAssistant } from '../features/assistant/api/requestAssistant'
 import { requestChat } from '../features/assistant/api/requestChat'
 import { parseInput, parseShared } from '../features/assistant/parseInput'
+import { diaryEntry } from '../features/assistant/diary'
 import { answer, chat, type Answer, type AnswerSource } from '../features/assistant/answer'
-import { pendingDiaries } from '../features/assistant/diary'
 import { greeting, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
 import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
 import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
@@ -15,6 +15,7 @@ import {
   type TodayWeather,
 } from '../features/online/weather'
 import { saveRecord } from '../features/records/recordStore'
+import { clearTalk, removeTurn, saveTurn } from '../features/records/talkStore'
 import { serverConfigured } from '../features/records/serverRecords'
 import { useRecords } from '../features/records/useRecords'
 import { useSync } from '../features/records/useSync'
@@ -28,12 +29,13 @@ import type { Draft } from './ConfirmCard'
 import { Conversation, type Exchange } from './Conversation'
 import { RecordList, type View } from './RecordList'
 import { Settings } from './Settings'
+import { useDiary } from './useDiary'
 import { useViewport } from './useViewport'
 import './app.css'
 
 const MINUTE = 60_000
 const WEATHER_MINUTES = 30
-const EXCHANGE_LIMIT = 30
+const EXCHANGE_LIMIT = 50
 /** 방금 한 일에 대한 반응이 보인 뒤에 축하한다. */
 const LEVEL_UP_DELAY = 1800
 const SEEN_LEVEL_KEY = 'personal-assistant.bond-level'
@@ -84,12 +86,23 @@ function App() {
   const [raised, setRaised] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
-  const { loaded, settings, events, todos, notes, diaries, bond } = records
+  const { loaded, settings, events, todos, notes, diaries, talk, bond } = records
   const updateStatus = useUpdate(loaded)
   const state = useMemo(
     () => ({ now, settings, events, todos, notes, weather, bondLevel: bond.level }),
     [now, settings, events, todos, notes, weather, bond.level],
   )
+  const writeDiary = useDiary(state, records, sync.accessKey)
+  // 이번에 나눈 말은 고르는 카드까지 담고 있어 저장된 것보다 먼저 쓴다.
+  const conversation = useMemo(() => {
+    const current = new Set(exchanges.map(({ id }) => id))
+    const saved: Exchange[] = talk.filter(({ id }) => !current.has(id))
+    return [...saved, ...exchanges]
+      .sort((left, right) => right.at.localeCompare(left.at))
+      .slice(0, EXCHANGE_LIMIT)
+  }, [talk, exchanges])
+  /** 지운 뒤에 늦게 온 답을 다시 저장하지 않는다. */
+  const removed = useRef(new Set<string>())
   const latestState = useRef(state)
   const promptInput = useRef<HTMLInputElement>(null)
   const scene = sceneFor(state)
@@ -170,13 +183,6 @@ function App() {
     [],
   )
 
-  useEffect(() => {
-    if (!loaded) return
-    for (const { date, body } of pendingDiaries(state, diaries)) {
-      void saveRecord('diary', { date, body }, `diary-${date}`).catch(console.error)
-    }
-  }, [loaded, state, diaries])
-
   /** 대화를 시작하면 시트를 올리고, 다른 기록으로 가면 내린다. */
   function setView(next: View) {
     if (next !== view) setRaised(next === 'talk')
@@ -197,63 +203,80 @@ function App() {
 
     const source = { ...state, diaries }
     const known = parsed.type === 'question' ? answer(input, source) : chat(input, state)
-    if (!known.direct && sync.connected) return talk(input, known, source)
+    if (!known.direct && sync.connected) return converse(input, known, source)
 
-    const id = addExchange(toExchange(input, known))
+    const exchange = addExchange({ question: input, ...toReply(known) })
     setLine({ title: known.title, body: known.title === known.text ? '' : '아래에 적어뒀어요.' })
     setHops((count) => count + 1)
     if (known.action?.type === 'writeDiary') {
-      const { date, body } = known.action
-      await saveRecord('diary', { date, body }, `diary-${date}`)
+      updateExchange(exchange, { reply: '쓰고 있어요…' })
+      const reply = await writeDiary(diaryEntry(state, talk))
+      settle(exchange, { reply })
     } else if (known.action?.type === 'loadWeather') {
-      const text = await enableWeather().catch((error: Error) => error.message)
-      updateExchange(id, { reply: text })
+      const reply = await enableWeather().catch((error: Error) => error.message)
+      settle(exchange, { reply })
+    } else {
+      settle(exchange)
     }
   }
 
   /** 연결이 안 되면 앱이 아는 것으로 답한다. */
-  async function talk(input: string, known: Answer, source: AnswerSource) {
-    const id = addExchange({ question: input, reply: '…' })
+  async function converse(input: string, known: Answer, source: AnswerSource) {
+    const exchange = addExchange({ question: input, reply: '…' })
     setThinking(true)
     setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
     try {
-      const reply = await requestChat(sync.accessKey, input, exchanges.toReversed(), source)
-      updateExchange(id, { reply })
+      const reply = await requestChat(sync.accessKey, input, conversation.toReversed(), source)
+      settle(exchange, { reply })
       setLine({ title: '듣고 있어요.', body: '' })
       setHops((count) => count + 1)
     } catch (error) {
       console.warn(error)
-      updateExchange(id, toExchange(input, known))
+      settle(exchange, toReply(known))
       setLine({ title: known.title, body: '지금은 연결이 잘 안 돼요.' })
     } finally {
       setThinking(false)
     }
   }
 
-  function addExchange(exchange: Omit<Exchange, 'id'>) {
-    const id = Date.now()
-    setExchanges((list) => [{ ...exchange, id }, ...list].slice(0, EXCHANGE_LIMIT))
-    return id
+  function addExchange(fields: Omit<Exchange, 'id' | 'at'>): Exchange {
+    const exchange = { ...fields, id: crypto.randomUUID(), at: new Date().toISOString() }
+    setExchanges((list) => [exchange, ...list].slice(0, EXCHANGE_LIMIT))
+    return exchange
   }
 
-  async function confirmProposal({ id }: Exchange, value: Draft) {
-    await confirm(value)
-    updateExchange(id, { reply: confirmedText(value), proposal: undefined })
-  }
-
-  function updateExchange(id: number, change: Partial<Exchange>) {
+  function updateExchange({ id }: Exchange, change: Partial<Exchange>) {
     setExchanges((list) => list.map((item) => (item.id === id ? { ...item, ...change } : item)))
   }
 
-  async function askAi({ id, question }: Exchange) {
+  /** 다 주고받은 말을 저장한다. */
+  function settle(exchange: Exchange, change: Partial<Exchange> = {}) {
+    if (removed.current.has(exchange.id)) return
+    updateExchange(exchange, change)
+    const { id, at, question, reply, items = [] } = { ...exchange, ...change }
+    const text = [reply, ...items.map((item) => `· ${item.text}`)].join('\n')
+    void saveTurn({ id, at, question, reply: text }).catch(console.error)
+  }
+
+  async function confirmProposal(exchange: Exchange, value: Draft) {
+    await confirm(value)
+    settle(exchange, { reply: confirmedText(value), proposal: undefined })
+  }
+
+  function forget(list: Exchange[]) {
+    for (const { id } of list) removed.current.add(id)
+    setExchanges((current) => current.filter(({ id }) => !removed.current.has(id)))
+  }
+
+  async function askAi(exchange: Exchange) {
     setThinking(true)
     setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
     try {
-      const reply = await requestAssistant(question, settings)
-      updateExchange(id, { reply, unknown: false })
+      const reply = await requestAssistant(exchange.question, settings)
+      settle(exchange, { reply, unknown: false })
       setLine({ title: '생각해봤어요.', body: '아래에 적어뒀어요.' })
     } catch (error) {
-      updateExchange(id, { reply: error instanceof Error ? error.message : '다시 물어봐 주세요.' })
+      updateExchange(exchange, { reply: error instanceof Error ? error.message : '다시 물어봐 주세요.' })
       setLine({ title: '잘 모르겠어요.', body: '아래에 이유를 적어뒀어요.' })
     } finally {
       setThinking(false)
@@ -389,19 +412,23 @@ function App() {
         <div className="scroll" key={view}>
           {view === 'talk' ? (
             <Conversation
-              exchanges={exchanges}
+              exchanges={conversation}
               connected={sync.connected}
               now={now}
               thinking={thinking}
               onAskAi={(exchange) => void askAi(exchange)}
               onConfirm={confirmProposal}
-              onDecline={({ id }) => {
-                updateExchange(id, { reply: '알겠어요. 안 넣을게요.', proposal: undefined })
+              onDecline={(exchange) => {
+                settle(exchange, { reply: '알겠어요. 안 넣을게요.', proposal: undefined })
                 setLine({ title: '알겠어요.', body: '못 들은 걸로 할게요.' })
               }}
-              onRemove={({ id }) => setExchanges((list) => list.filter((item) => item.id !== id))}
+              onRemove={(exchange) => {
+                forget([exchange])
+                void removeTurn(exchange.id).catch(console.error)
+              }}
               onClear={() => {
-                setExchanges([])
+                forget(conversation)
+                void clearTalk().catch(console.error)
                 setLine({ title: '싹 잊었어요.', body: '새로 이야기해요.' })
               }}
             />
@@ -473,8 +500,8 @@ function objectParticle(word: string) {
   return (word.charCodeAt(word.length - 1) - 0xac00) % 28 ? '을' : '를'
 }
 
-function toExchange(question: string, { text, items, unknown }: Answer) {
-  return { question, reply: text, items, unknown }
+function toReply({ text, items, unknown }: Answer) {
+  return { reply: text, items, unknown }
 }
 
 function confirmedText(draft: Draft) {

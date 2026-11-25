@@ -57,3 +57,28 @@ test('어제 일기가 있거나 어제는 쓰기 전이었으면 채우지 않�
   expect(pendingDiaries(state(morning, [old]), [diary('2026-11-24')])).toEqual([])
   expect(pendingDiaries(state(morning, [todo('새 일', morning)]), [])).toEqual([])
 })
+
+test('연결되어 있으면 대화를 담아 다시 쓰고, 새로 나눈 말이 없으면 그대로 둔다', () => {
+  const night = state(new Date(2026, 10, 24, 22, 30))
+  const turn = (id: string, hour = 12) => ({ id, at: new Date(2026, 10, 24, hour).toISOString(), question: id, reply: '' })
+  const [plain] = pendingDiaries(night, [])
+  const rule = plain.body
+  const saved = (until?: string) => {
+    const record = diary('2026-11-24', rule)
+    if (until !== undefined) record.data.written = { until, rule }
+    return [record]
+  }
+  expect(pendingDiaries(night, saved(), [turn('a')], false)).toEqual([])
+  expect(pendingDiaries(night, saved(), [turn('a')], true)[0].turns).toHaveLength(1)
+  expect(pendingDiaries(night, saved(turn('a').at), [turn('a')], true)).toEqual([])
+  expect(pendingDiaries(night, saved(turn('a').at), [turn('b', 13)], true)).toHaveLength(1)
+  // 연결이 끊겨도 담아 쓴 일기를 덮지 않고, 대화를 지워도 다시 쓰지 않는다.
+  expect(pendingDiaries(night, saved(turn('a').at), [turn('b', 13)], false)).toEqual([])
+  expect(pendingDiaries(night, saved(turn('a').at), [], true)).toEqual([])
+})
+
+test('어제 대화만 나눴어도 일기를 쓴다', () => {
+  const at = new Date(2026, 10, 24, 20).toISOString()
+  const entries = pendingDiaries(state(new Date(2026, 10, 25, 9)), [], [{ id: 'a', at, question: '안녕', reply: '네' }])
+  expect(dates(entries)).toEqual(['2026-11-24'])
+})

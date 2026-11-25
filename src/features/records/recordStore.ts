@@ -17,7 +17,7 @@ export async function loadRecords(): Promise<AssistantRecord[]> {
 }
 
 /** 시계가 뒤로 가도 같은 기록의 수정 시각은 항상 늘어난다. */
-function nextTimestamp(previous?: string) {
+export function nextTimestamp(previous?: string) {
   const floor = previous ? Date.parse(previous) + 1 : 0
   return new Date(Math.max(Date.now(), floor)).toISOString()
 }
