@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { useState } from 'react'
-import { BRIEFING_HOUR, requestNotificationPermission } from '../features/notify/notifications'
+import { BRIEFING_HOUR, requestNotificationPermission, TODO_HOURS } from '../features/notify/notifications'
 import { saveRecord } from '../features/records/recordStore'
 import { SETTINGS_ID, type RecordData, type Tone } from '../features/records/types'
 
@@ -31,8 +31,10 @@ export function Preferences({ settings, onSaved }: PreferencesProps) {
     setBusy(true)
     setError('')
     try {
-      if (next.briefing && !settings.briefing && !(await requestNotificationPermission())) {
-        throw new Error('알림 권한을 허용해야 아침 보고를 보낼 수 있어요.')
+      const turnedOn =
+        (next.briefing && !settings.briefing) || (next.todoReminder && !settings.todoReminder)
+      if (turnedOn && !(await requestNotificationPermission())) {
+        throw new Error('알림 권한을 허용해야 알릴 수 있어요.')
       }
       await saveRecord('setting', next, SETTINGS_ID)
       onSaved()
@@ -69,6 +71,16 @@ export function Preferences({ settings, onSaved }: PreferencesProps) {
               onChange={(event) => edit({ briefing: event.target.checked })}
             />
             매일 아침 {BRIEFING_HOUR}시에 보고 받기
+          </label>
+        )}
+        {Capacitor.isNativePlatform() && (
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={draft.todoReminder}
+              onChange={(event) => edit({ todoReminder: event.target.checked })}
+            />
+            할 일 알림 (아침 {TODO_HOURS.morning}시, 저녁 {TODO_HOURS.evening - 12}시)
           </label>
         )}
         <label>

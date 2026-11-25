@@ -1,10 +1,13 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications'
+import type { AssistantRecord } from '../records/types'
 import { relatedNotes } from '../recall/recall'
-import { briefing, localDate, type DayState } from '../assistant/speech'
+import { briefing, dueTodos, localDate, type DayState } from '../assistant/speech'
 
 export const BRIEFING_HOUR = 7
 const BRIEFING_DAYS = 7
+export const TODO_HOURS = { morning: 8, evening: 18 }
+const TODO_TITLES = 3
 /** 반복 일정이 자리를 다 차지하지 않게 넉넉히 둔다. */
 const EVENT_LIMIT = 120
 
@@ -58,7 +61,35 @@ export function planNotifications(state: PlanState): LocalNotificationSchema[] {
       schedule: { at, allowWhileIdle: true },
     })
   }
+  for (let offset = 0; settings.todoReminder && offset < BRIEFING_DAYS; offset += 1) {
+    const day = new Date(now)
+    day.setDate(now.getDate() + offset)
+    const date = localDate(day)
+    const due = dueTodos(day, state.todos).filter(({ data }) => data.dueDate)
+    // 밀린 일은 아침에만 알린다.
+    const reminders = [
+      { hour: TODO_HOURS.morning, todos: due, title: '오늘 할 일' },
+      { hour: TODO_HOURS.evening, todos: due.filter(({ data }) => data.dueDate === date), title: '아직 남은 일' },
+    ]
+    for (const { hour, todos, title } of reminders) {
+      const at = new Date(day)
+      at.setHours(hour, 0, 0, 0)
+      if (at <= now || !todos.length) continue
+      planned.push({
+        id: notificationId(`todo:${hour}:${date}`),
+        title: `${title} ${todos.length}개`,
+        body: todoTitles(todos),
+        schedule: { at, allowWhileIdle: true },
+      })
+    }
+  }
   return planned
+}
+
+function todoTitles(todos: AssistantRecord<'todo'>[]) {
+  const titles = todos.slice(0, TODO_TITLES).map(({ data }) => data.title).join(', ')
+  const others = todos.length - TODO_TITLES
+  return others > 0 ? `${titles} 외 ${others}개` : titles
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {

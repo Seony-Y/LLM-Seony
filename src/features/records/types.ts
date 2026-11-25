@@ -28,7 +28,7 @@ export interface RecordData {
   /** written은 AI가 쓴 일기일 때, 담은 마지막 대화 시각과 정해진 글. */
   diary: { date: string; body: string; written?: { until: string; rule: string } }
   talk: { turns: Turn[] }
-  setting: { assistantName: string; userName: string; tone: Tone; briefing: boolean }
+  setting: { assistantName: string; userName: string; tone: Tone; briefing: boolean; todoReminder: boolean }
 }
 
 export type Tone = 'warm' | 'nag'
@@ -52,4 +52,5 @@ export const defaultSettings: RecordData['setting'] = {
   userName: '대장',
   tone: 'warm',
   briefing: false,
+  todoReminder: true,
 }
