@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { parseInput, parseShared } from './parseInput'
+import { isSpoken, parseInput, parseShared } from './parseInput'
 import { localDate } from './speech'
 
 // 2026-11-24는 화요일
@@ -141,4 +141,9 @@ test.each([
 test('반복하는 말이라도 일정이나 할 일이 아니면 그대로 둔다', () => {
   expect(parseInput('매일 피곤하다', now).type).toBe('note')
   expect(parseInput('2시간 반 뒤 약 먹었는지 확인', now).type).toBe('event')
+})
+
+test('하던 말이 섞인 제목', () => {
+  expect(['치과 가야 하는데 걱정돼', '빨래 꺼내야 돼'].every(isSpoken)).toBe(true)
+  expect(['치과', '주간 회의', '영양제 먹기', '민수와 저녁', '병원 예약'].some(isSpoken)).toBe(false)
 })

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { flushSync } from 'react-dom'
 import { localAiAvailable, requestAssistant } from '../features/assistant/api/requestAssistant'
 import { requestChat } from '../features/assistant/api/requestChat'
-import { parseInput, parseShared } from '../features/assistant/parseInput'
+import { requestSuggestion } from '../features/assistant/api/requestSuggestion'
+import { isSpoken, parseInput, parseShared, type ParsedInput } from '../features/assistant/parseInput'
 import { diaryEntry } from '../features/assistant/diary'
 import { answer, chat, type Answer, type AnswerSource } from '../features/assistant/answer'
 import { greeting, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
@@ -208,15 +209,19 @@ function App() {
     if (!input || thinking) return
     const parsed = parseInput(input)
     setPrompt('')
+    const source = { ...state, diaries }
+    const spoken = parsed.type === 'event' && isSpoken(parsed.title)
+    if (spoken && sync.connected) {
+      return converse(input, { title: '맡기는 거예요?', text: proposalText(parsed) }, source, parsed, parsed)
+    }
     if (parsed.type !== 'question' && (parsed.type !== 'note' || parsed.explicit)) {
       addExchange({ question: input, reply: proposalText(parsed), proposal: parsed })
       setLine({ title: '맡기는 거예요?', body: '아래에서 골라주세요.' })
       return
     }
 
-    const source = { ...state, diaries }
     const known = parsed.type === 'question' ? answer(input, source) : chat(input, state)
-    if (!known.direct && sync.connected) return converse(input, known, source)
+    if (!known.direct && sync.connected) return converse(input, known, source, parsed)
 
     const exchange = addExchange({ question: input, ...toReply(known) })
     setLine({ title: known.title, body: known.title === known.text ? '' : '아래에 적어뒀어요.' })
@@ -237,18 +242,35 @@ function App() {
   }
 
   /** 연결이 안 되면 앱이 아는 것으로 답한다. */
-  async function converse(input: string, known: Answer, source: AnswerSource) {
+  async function converse(
+    input: string,
+    known: Answer,
+    source: AnswerSource,
+    parsed: ParsedInput,
+    draft?: Draft,
+  ) {
     const exchange = addExchange({ question: input, reply: '…' })
     setThinking(true)
     setLine({ title: '음, 잠깐만요.', body: '생각하고 있어요.' })
     try {
-      const reply = await requestChat(sync.accessKey, input, conversation.toReversed(), source)
-      settle(exchange, { reply })
+      const turns = conversation.toReversed()
+      const suggesting = requestSuggestion(sync.accessKey, input, turns, source, parsed).catch((error) => {
+        console.warn(error)
+        return draft
+      })
+      const reply = await requestChat(sync.accessKey, input, turns, source)
+      settle(exchange, { reply, suggested: true })
       setLine({ title: '듣고 있어요.', body: '' })
       setHops((count) => count + 1)
+      // 카드는 답보다 늦을 수 있어 기다리게 하지 않는다.
+      void suggesting.then((proposal) => {
+        if (!proposal) return
+        updateExchange(exchange, { proposal })
+        setLine({ title: '이거 넣어둘까요?', body: '아래에서 골라주세요.' })
+      })
     } catch (error) {
       console.warn(error)
-      settle(exchange, toReply(known))
+      settle(exchange, { ...toReply(known), proposal: draft })
       setLine({ title: known.title, body: '지금은 연결이 잘 안 돼요.' })
     } finally {
       setThinking(false)
@@ -276,7 +298,13 @@ function App() {
 
   async function confirmProposal(exchange: Exchange, value: Draft) {
     await confirm(value)
-    settle(exchange, { reply: confirmedText(value), proposal: undefined })
+    const done = confirmedText(value)
+    settle(exchange, {
+      reply: exchange.suggested ? `${exchange.reply}
+
+${done}` : done,
+      proposal: undefined,
+    })
   }
 
   function forget(list: Exchange[]) {
@@ -435,7 +463,8 @@ function App() {
               onAskAi={(exchange) => void askAi(exchange)}
               onConfirm={confirmProposal}
               onDecline={(exchange) => {
-                settle(exchange, { reply: '알겠어요. 안 넣을게요.', proposal: undefined })
+                const reply = exchange.suggested ? exchange.reply : '알겠어요. 안 넣을게요.'
+                settle(exchange, { reply, proposal: undefined })
                 setLine({ title: '알겠어요.', body: '못 들은 걸로 할게요.' })
               }}
               onRemove={(exchange) => {
