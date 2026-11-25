@@ -65,3 +65,36 @@ test('지난 7시를 빼고 7일 안의 아침 보고를 그날 일정으로 만
   expect(planned[1].body).toContain('잡힌 일정은 없어요')
   expect(new Set(planned.map(({ id }) => id)).size).toBe(6)
 })
+
+function todo(title: string, dueDate?: string, doneAt: string | null = null): AssistantRecord<'todo'> {
+  return { ...event(title, now), kind: 'todo', data: { title, doneAt, dueDate } } as AssistantRecord<'todo'>
+}
+
+const todoPlan = (todos: AssistantRecord<'todo'>[], at = now, todoReminder = true) =>
+  planNotifications({ now: at, settings: { ...defaultSettings, todoReminder }, events: [], todos }).map(
+    ({ title, body, schedule }) => `${schedule!.at!.getDate()}일 ${schedule!.at!.getHours()}시 ${title}: ${body}`,
+  )
+
+test('할 일은 그날 아침과 저녁에 알린다', () => {
+  expect(todoPlan([todo('보고서', '2026-11-30')])).toEqual([
+    '30일 8시 오늘 할 일 1개: 보고서',
+    '30일 18시 아직 남은 일 1개: 보고서',
+  ])
+  expect(todoPlan([todo('오늘 일', '2026-11-24')])[0]).toBe('24일 18시 아직 남은 일 1개: 오늘 일')
+})
+
+test('밀린 일은 아침에만 알린다', () => {
+  const plan = todoPlan([todo('밀린 일', '2026-11-20')])
+  expect(plan).toHaveLength(6)
+  expect(plan.every((text) => text.includes('8시 오늘 할 일'))).toBe(true)
+})
+
+test('여러 개는 한 번에 묶는다', () => {
+  const todos = ['가', '나', '다', '라'].map((title) => todo(title, '2026-11-30'))
+  expect(todoPlan(todos)[0]).toBe('30일 8시 오늘 할 일 4개: 가, 나, 다 외 1개')
+})
+
+test('끝낸 일, 날짜 없는 일, 알림을 끈 때는 울리지 않는다', () => {
+  expect(todoPlan([todo('끝', '2026-11-30', now.toISOString()), todo('언젠가')])).toEqual([])
+  expect(todoPlan([todo('보고서', '2026-11-30')], now, false)).toEqual([])
+})

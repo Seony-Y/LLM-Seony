@@ -349,6 +349,7 @@ ${done}` : done,
       }
       case 'todo':
         await saveRecord('todo', { title: value.title, doneAt: null, dueDate: value.dueDate, repeat: value.repeat })
+        if (settings.todoReminder) void scheduleReminders().catch(console.error)
         break
       case 'note':
         await saveRecord('note', { body: value.body })
@@ -368,7 +369,7 @@ ${done}` : done,
         ? { title: '기억해 뒀어요.', body: '나중에 물어보면 찾아줄게요.' }
         : { title: '챙겨뒀어요.', body: `잊어버려도 괜찮아요, ${settings.userName}.` },
     )
-    if (kind === 'event') void scheduleReminders().catch(console.error)
+    if (kind === 'event' || (kind === 'todo' && settings.todoReminder)) void scheduleReminders().catch(console.error)
   }
 
   function tapRoom(target: RoomTarget) {
