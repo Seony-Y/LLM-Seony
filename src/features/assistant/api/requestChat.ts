@@ -1,4 +1,5 @@
 import { recall } from '../../recall/recall'
+import { nextOccurrences, REPEAT_LABEL } from '../../records/repeat'
 import { postChat, type ChatMessage } from '../../records/serverRecords'
 import type { Turn } from '../../records/types'
 import type { AnswerSource } from '../answer'
@@ -36,9 +37,10 @@ export function persona(text: string, source: AnswerSource): string {
     (source.bondLevel ?? 0) >= CLOSE_LEVEL ? '친한 친구처럼 편한 반말로' : '부드러운 존댓말(해요체)로'
   const tone = settings.tone === 'nag' ? '장난스럽게 잔소리를 섞되 다정하게' : '다정하게'
 
-  const events = eventsFrom(now, source.events).map(({ data }) => {
+  const events = nextOccurrences(eventsFrom(now, source.events), now).map(({ data }) => {
     const at = new Date(data.startsAt)
-    return `${day.format(at)} ${formatTime(at)} ${data.title}`
+    const repeat = data.repeat ? ` (${REPEAT_LABEL[data.repeat.every]} 반복)` : ''
+    return `${day.format(at)} ${formatTime(at)} ${data.title}${repeat}`
   })
   const todos = openTodos(source.todos).map(({ data }) =>
     data.dueDate ? `${data.title} (${data.dueDate}까지)` : data.title,

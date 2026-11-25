@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { localDate } from '../features/assistant/speech'
 import type { ParsedInput } from '../features/assistant/parseInput'
+import { REPEAT_LABEL, repeatOf } from '../features/records/repeat'
+import type { Repeat } from '../features/records/types'
 import { formatInputTime, nextHour } from './dates'
 
 export type Draft = Exclude<ParsedInput, { type: 'question' }>
@@ -22,6 +24,9 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
   const [dueDate, setDueDate] = useState(
     (draft.type === 'todo' && draft.dueDate) || localDate(new Date()),
   )
+  const [every, setEvery] = useState<Repeat['every'] | ''>(
+    draft.type === 'event' || draft.type === 'todo' ? (draft.repeat?.every ?? '') : '',
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const isRecord = type === 'event' || type === 'todo' || type === 'note'
@@ -38,7 +43,7 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
     setBusy(true)
     setError('')
     try {
-      await onConfirm(build(draft, type, value, date, dueDate))
+      await onConfirm(build(draft, type, value, date, dueDate, every))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '처리하지 못했어요.')
       setBusy(false)
@@ -80,6 +85,20 @@ export function ConfirmCard({ draft, onConfirm, onCancel }: ConfirmCardProps) {
           onChange={(event) => setDueDate(event.target.value)}
         />
       )}
+      {(type === 'event' || type === 'todo') && (
+        <select
+          aria-label="반복"
+          value={every}
+          onChange={(event) => setEvery(event.target.value as Repeat['every'] | '')}
+        >
+          <option value="">반복 안 함</option>
+          {Object.entries(REPEAT_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      )}
       {error && <p role="alert">{error}</p>}
       <div className="actions">
         <button className="primary" type="submit" disabled={busy}>
@@ -118,11 +137,14 @@ function build(
   value: string,
   startsAt: Date,
   dueDate: string,
+  every: Repeat['every'] | '',
 ): Draft {
   if (draft.type === 'message') return { ...draft, message: value }
   if (draft.type === 'call') return { ...draft, recipient: value }
-  if (type === 'event') return { type, title: value, startsAt }
-  if (type === 'todo') return { type, title: value, dueDate }
+  if (type === 'event') return { type, title: value, startsAt, repeat: repeatOf(every, startsAt) }
+  if (type === 'todo') {
+    return { type, title: value, dueDate, repeat: repeatOf(every, new Date(`${dueDate}T00:00`)) }
+  }
   return { type: 'note', body: value }
 }
 

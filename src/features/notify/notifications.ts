@@ -5,7 +5,8 @@ import { briefing, localDate, type DayState } from '../assistant/speech'
 
 export const BRIEFING_HOUR = 7
 const BRIEFING_DAYS = 7
-const EVENT_LIMIT = 50
+/** 반복 일정이 자리를 다 차지하지 않게 넉넉히 둔다. */
+const EVENT_LIMIT = 120
 
 const MEMORY_LEAD = 30 * 60_000
 

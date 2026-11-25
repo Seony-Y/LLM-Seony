@@ -1,9 +1,13 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { relatedNotes } from '../features/recall/recall'
 import { DIARY_HOUR, localDate, openTodos } from '../features/assistant/speech'
 import { saveRecord, setDeleted } from '../features/records/recordStore'
-import type { RecordData } from '../features/records/types'
+import { nextOccurrences, REPEAT_LABEL, seriesId } from '../features/records/repeat'
+import { toggleTodo } from '../features/records/todoStore'
+import type { AssistantRecord, RecordData } from '../features/records/types'
 import type { Records } from '../features/records/useRecords'
+import type { AddKind } from './AddForm'
+import { ConfirmModal } from './ConfirmModal'
 import { formatDay, formatDue } from './dates'
 
 export type View = 'event' | 'todo' | 'diary' | 'note' | 'talk'
@@ -13,9 +17,11 @@ interface RecordListProps {
   records: Records
   now: Date
   onDone: (title: string) => void
+  onEdit: (record: AssistantRecord<AddKind>) => void
 }
 
-export function RecordList({ view, records, now, onDone }: RecordListProps) {
+export function RecordList({ view, records, now, onDone, onEdit }: RecordListProps) {
+  const [removing, setRemoving] = useState<AssistantRecord<'event'> | null>(null)
   if (records.error) return <p role="alert">{records.error}</p>
   if (!records.loaded) return null
 
@@ -31,52 +37,22 @@ export function RecordList({ view, records, now, onDone }: RecordListProps) {
 
   if (view === 'todo') {
     if (!records.todos.length) return <Empty>할 일이 없어요. 아래에서 추가해 보세요.</Empty>
-    const todos = [...openTodos(records.todos), ...records.todos.filter(({ data }) => data.doneAt)]
+    const done = records.todos.filter(({ data }) => data.doneAt)
+    const isToday = ({ data }: AssistantRecord<'todo'>) => localDate(new Date(data.doneAt!)) === localDate(now)
+    const row = (todo: AssistantRecord<'todo'>) => (
+      <TodoRow key={todo.id} todo={todo} now={now} onDone={onDone} onEdit={() => onEdit(todo)} />
+    )
+    const past = done.filter((todo) => !isToday(todo))
     return (
-      <ul>
-        {todos.map(({ id, data }) => (
-          <Row
-            key={id}
-            id={id}
-            title={data.title}
-            detail={
-              <label className={isLate(data, now) ? 'due late' : 'due'}>
-                {data.dueDate ? formatDue(data.dueDate, now) : '날짜 정하기'}
-                <input
-                  type="date"
-                  aria-label={`${data.title} 언제까지`}
-                  value={data.dueDate ?? ''}
-                  onClick={(event) => event.currentTarget.showPicker()}
-                  onChange={(event) => {
-                    const dueDate = event.target.value
-                    if (dueDate) void saveRecord('todo', { ...data, dueDate }, id)
-                  }}
-                />
-              </label>
-            }
-            done={Boolean(data.doneAt)}
-          >
-            <button
-              className="check"
-              type="button"
-              aria-label={`${data.title} ${data.doneAt ? '되돌리기' : '끝냄'}`}
-              onClick={async () => {
-                const doneAt = data.doneAt ? null : new Date().toISOString()
-                await saveRecord('todo', { ...data, doneAt }, id)
-                if (doneAt) onDone(data.title)
-              }}
-            >
-              <i>
-                {data.doneAt && (
-                  <svg width="14" height="14" viewBox="0 0 14 14">
-                    <path d="M2.5 7.5l3 3 6-6.5" />
-                  </svg>
-                )}
-              </i>
-            </button>
-          </Row>
-        ))}
-      </ul>
+      <>
+        <ul>{[...openTodos(records.todos), ...done.filter(isToday)].map(row)}</ul>
+        {past.length > 0 && (
+          <details className="past">
+            <summary>지난 끝낸 일 {past.length}개</summary>
+            <ul>{past.map(row)}</ul>
+          </details>
+        )}
+      </>
     )
   }
 
@@ -84,45 +60,143 @@ export function RecordList({ view, records, now, onDone }: RecordListProps) {
     if (!records.notes.length) return <Empty>아직 기억해 둔 게 없어요. 아래에서 추가해 보세요.</Empty>
     return (
       <ul>
-        {records.notes.map(({ id, data, createdAt }) => (
-          <Row key={id} id={id} title={data.body} detail={`${formatDay(createdAt, now)} 알려줌`} />
+        {records.notes.map((note) => (
+          <Row
+            key={note.id}
+            title={note.data.body}
+            detail={`${formatDay(note.createdAt, now)} 알려줌`}
+            onEdit={() => onEdit(note)}
+            onRemove={() => void setDeleted(note.id, true)}
+          />
         ))}
       </ul>
     )
   }
 
-  const upcoming = records.events.filter(({ data }) => localDate(new Date(data.startsAt)) >= localDate(now))
+  const upcoming = nextOccurrences(records.events, now).filter(
+    ({ data }) => localDate(new Date(data.startsAt)) >= localDate(now),
+  )
   if (!upcoming.length) return <Empty>잡힌 일정이 없어요. 아래에서 추가해 보세요.</Empty>
   return (
-    <ul>
-      {upcoming.map(({ id, data }) => (
-        <Row
-          key={id}
-          id={id}
-          title={data.title}
-          detail={`${formatDay(data.startsAt, now)} ${formatClock(data.startsAt)}${data.remind ? '' : ' · 알림 없음'}`}
-          memories={relatedNotes(data.title, records.notes).map((note) => note.data.body)}
+    <>
+      <ul>
+        {upcoming.map((event) => {
+          const { data } = event
+          const details = [
+            `${formatDay(data.startsAt, now)} ${formatClock(data.startsAt)}`,
+            data.repeat && REPEAT_LABEL[data.repeat.every],
+            !data.remind && '알림 없음',
+          ]
+          return (
+            <Row
+              key={event.id}
+              title={data.title}
+              detail={details.filter(Boolean).join(' · ')}
+              memories={relatedNotes(data.title, records.notes).map((note) => note.data.body)}
+              onEdit={() => onEdit(event)}
+              onRemove={() => (data.repeat ? setRemoving(event) : void setDeleted(event.id, true))}
+            />
+          )
+        })}
+      </ul>
+      {removing && (
+        <ConfirmModal
+          title="반복되는 일정이에요"
+          body={`${removing.data.title}, ${formatDay(removing.data.startsAt, now)} 것만 건너뛸까요, 앞으로도 모두 지울까요?`}
+          confirmLabel="모두 지우기"
+          other={{
+            label: '이번만 건너뛰기',
+            onClick: () => {
+              const { data } = removing
+              const skip = [...(data.skip ?? []), localDate(new Date(data.startsAt))]
+              const master = seriesId(removing.id)
+              void saveRecord('event', { ...data, startsAt: records.seriesStart(master), skip }, master)
+              setRemoving(null)
+            },
+          }}
+          onCancel={() => setRemoving(null)}
+          onConfirm={() => {
+            void setDeleted(seriesId(removing.id), true)
+            setRemoving(null)
+          }}
         />
-      ))}
-    </ul>
+      )}
+    </>
+  )
+}
+
+interface TodoRowProps {
+  todo: AssistantRecord<'todo'>
+  now: Date
+  onDone: (title: string) => void
+  onEdit: () => void
+}
+
+function TodoRow({ todo: { id, data }, now, onDone, onEdit }: TodoRowProps) {
+  return (
+    <Row
+      title={data.title}
+      detail={
+        <>
+          <label className={isLate(data, now) ? 'due late' : 'due'}>
+            {data.dueDate ? formatDue(data.dueDate, now) : '날짜 정하기'}
+            <input
+              type="date"
+              aria-label={`${data.title} 언제까지`}
+              value={data.dueDate ?? ''}
+              onClick={(event) => event.currentTarget.showPicker()}
+              onChange={(event) => {
+                const dueDate = event.target.value
+                if (dueDate) void saveRecord('todo', { ...data, dueDate }, id)
+              }}
+            />
+          </label>
+          {data.repeat && !data.doneAt && ` · ${REPEAT_LABEL[data.repeat.every]}`}
+        </>
+      }
+      done={Boolean(data.doneAt)}
+      onEdit={onEdit}
+      onRemove={() => void setDeleted(id, true)}
+    >
+      <button
+        className="check"
+        type="button"
+        aria-label={`${data.title} ${data.doneAt ? '되돌리기' : '끝냄'}`}
+        onClick={async () => {
+          await toggleTodo(id)
+          if (!data.doneAt) onDone(data.title)
+        }}
+      >
+        <i>
+          {data.doneAt && (
+            <svg width="14" height="14" viewBox="0 0 14 14">
+              <path d="M2.5 7.5l3 3 6-6.5" />
+            </svg>
+          )}
+        </i>
+      </button>
+    </Row>
   )
 }
 
 interface RowProps {
-  id: string
   title: string
   detail: ReactNode
   memories?: string[]
   done?: boolean
   children?: ReactNode
+  onEdit: () => void
+  onRemove: () => void
 }
 
-function Row({ id, title, detail, memories, done, children }: RowProps) {
+function Row({ title, detail, memories, done, children, onEdit, onRemove }: RowProps) {
   return (
     <li className={done ? 'done' : undefined}>
       {children}
       <div>
-        {title}
+        <button className="row-title" type="button" aria-label={`${title} 고치기`} onClick={onEdit}>
+          {title}
+        </button>
         <small>{detail}</small>
         {memories?.map((memory) => (
           <small className="memory" key={memory}>
@@ -130,12 +204,7 @@ function Row({ id, title, detail, memories, done, children }: RowProps) {
           </small>
         ))}
       </div>
-      <button
-        className="remove"
-        type="button"
-        aria-label={`${title} 휴지통으로`}
-        onClick={() => setDeleted(id, true)}
-      >
+      <button className="remove" type="button" aria-label={`${title} 휴지통으로`} onClick={onRemove}>
         ×
       </button>
     </li>

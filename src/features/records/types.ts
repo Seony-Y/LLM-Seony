@@ -6,10 +6,24 @@ export interface Turn {
   reply: string
 }
 
+/** on은 매월 반복하는 날. */
+export interface Repeat {
+  every: 'day' | 'weekday' | 'week' | 'month'
+  on?: number
+}
+
 export interface RecordData {
-  event: { title: string; note: string; startsAt: string; remind: boolean }
-  /** dueDate는 YYYY-MM-DD. 예전 기록에는 없다. */
-  todo: { title: string; doneAt: string | null; dueDate?: string }
+  /** skip은 반복에서 건너뛸 날. */
+  event: {
+    title: string
+    note: string
+    startsAt: string
+    remind: boolean
+    repeat?: Repeat
+    skip?: string[]
+  }
+  /** dueDate는 YYYY-MM-DD. 예전 기록에는 없다. nextId는 끝내면서 만든 다음 차례. */
+  todo: { title: string; doneAt: string | null; dueDate?: string; repeat?: Repeat; nextId?: string }
   note: { body: string }
   /** written은 AI가 쓴 일기일 때, 담은 마지막 대화 시각과 정해진 글. */
   diary: { date: string; body: string; written?: { until: string; rule: string } }

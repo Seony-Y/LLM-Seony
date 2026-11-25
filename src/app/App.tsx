@@ -15,6 +15,7 @@ import {
   type TodayWeather,
 } from '../features/online/weather'
 import { saveRecord } from '../features/records/recordStore'
+import type { AssistantRecord } from '../features/records/types'
 import { clearTalk, removeTurn, saveTurn } from '../features/records/talkStore'
 import { serverConfigured } from '../features/records/serverRecords'
 import { useRecords } from '../features/records/useRecords'
@@ -84,6 +85,7 @@ function App() {
   const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [raised, setRaised] = useState(false)
+  const [editing, setEditing] = useState<AssistantRecord<AddKind>>()
   const [localAi, setLocalAi] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
@@ -107,6 +109,11 @@ function App() {
   const latestState = useRef(state)
   const promptInput = useRef<HTMLInputElement>(null)
   const scene = sceneFor(state)
+  // 고치는 사이에 지워진 기록은 되살리지 않는다.
+  const current =
+    editing && editing.kind === view && [...events, ...todos, ...notes].some(({ id }) => id === editing.id)
+      ? editing
+      : undefined
   const spoken = line ?? greeting(state)
   const needsAttention =
     sync.error !== '' || updateStatus !== 'latest' || (serverConfigured && !sync.connected)
@@ -192,6 +199,7 @@ function App() {
   function setView(next: View) {
     if (next !== view) setRaised(next === 'talk')
     changeView(next)
+    setEditing(undefined)
   }
 
   async function submit(event: React.FormEvent) {
@@ -305,14 +313,14 @@ function App() {
         await dial(value.recipient)
         break
       case 'event': {
-        const { title, startsAt } = value
-        await saveRecord('event', { title, note: '', startsAt: startsAt.toISOString(), remind: true })
+        const { title, startsAt, repeat } = value
+        await saveRecord('event', { title, note: '', startsAt: startsAt.toISOString(), remind: true, repeat })
         // 저장은 알림 권한과 상관없이 끝낸다.
         void scheduleReminders().catch(console.error)
         break
       }
       case 'todo':
-        await saveRecord('todo', { title: value.title, doneAt: null, dueDate: value.dueDate })
+        await saveRecord('todo', { title: value.title, doneAt: null, dueDate: value.dueDate, repeat: value.repeat })
         break
       case 'note':
         await saveRecord('note', { body: value.body })
@@ -445,6 +453,7 @@ function App() {
               view={view}
               records={records}
               now={now}
+              onEdit={setEditing}
               onDone={() => {
                 setCheers((count) => count + 1)
                 setHops((count) => count + 1)
@@ -473,7 +482,19 @@ function App() {
             </button>
           </form>
         ) : (
-          view !== 'diary' && <AddForm key={`add-${view}`} kind={view} onAdded={celebrateAdd} />
+          view !== 'diary' && (
+            <AddForm
+              key={`add-${view}-${current?.id ?? ''}`}
+              kind={view}
+              editing={current}
+              onSaved={(kind) => {
+                setEditing(undefined)
+                if (current) setLine({ title: '고쳐뒀어요.', body: '' })
+                else celebrateAdd(kind)
+              }}
+              onCancel={() => setEditing(undefined)}
+            />
+          )
         )}
       </section>
       <Settings
