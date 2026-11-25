@@ -155,3 +155,18 @@ test('AI가 실패하면 502로 알린다', async () => {
   const body = JSON.stringify([{ role: 'user', content: '안녕' }])
   expect((await call('chat', { method: 'POST', body }, KEY, { ...env, AI })).status).toBe(502)
 })
+
+test('대화는 고친 이력을 남기지 않고 7일 뒤에 지운다', async () => {
+  const talk = (text: string, at: string) => ({ ...row('t', text, at), kind: 'talk', created_at: '2026-11-10T00:00:00Z' })
+  await push(talk('첫 말', '2026-11-10T00:00:00Z'))
+  await push(talk('다음 말', '2026-11-10T00:01:00Z'))
+  const history = () => env.DB.prepare('SELECT count(*) AS n FROM record_history').first('n')
+  expect(await history()).toBe(0)
+
+  const run = (day: number) => worker.scheduled({ scheduledTime: Date.UTC(2026, 10, day) } as never, env)
+  await run(16)
+  expect((await pull())[0].data).toEqual({ t: '다음 말' })
+  await run(18)
+  expect((await pull())[0].data).toEqual({ purged: true })
+  expect(await history()).toBe(0)
+})

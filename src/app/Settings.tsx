@@ -175,7 +175,8 @@ function saveStatus(sync: Sync, pending: number) {
 
 function recordTitle(record: AssistantRecord) {
   if (record.kind === 'event' || record.kind === 'todo') return record.data.title
-  return record.kind === 'setting' ? '설정' : record.data.body
+  if (record.kind === 'note' || record.kind === 'diary') return record.data.body
+  return record.kind === 'setting' ? '설정' : '대화'
 }
 
 interface ServerProps {

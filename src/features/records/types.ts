@@ -1,9 +1,19 @@
+/** 주고받은 말 한 번. */
+export interface Turn {
+  id: string
+  at: string
+  question: string
+  reply: string
+}
+
 export interface RecordData {
   event: { title: string; note: string; startsAt: string; remind: boolean }
   /** dueDate는 YYYY-MM-DD. 예전 기록에는 없다. */
   todo: { title: string; doneAt: string | null; dueDate?: string }
   note: { body: string }
-  diary: { date: string; body: string }
+  /** written은 AI가 쓴 일기일 때, 담은 마지막 대화 시각과 정해진 글. */
+  diary: { date: string; body: string; written?: { until: string; rule: string } }
+  talk: { turns: Turn[] }
   setting: { assistantName: string; userName: string; tone: Tone; briefing: boolean }
 }
 

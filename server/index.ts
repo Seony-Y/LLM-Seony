@@ -14,7 +14,7 @@ interface Row {
   deleted_at: string | null
 }
 
-const KINDS = ['event', 'todo', 'note', 'diary', 'setting']
+const KINDS = ['event', 'todo', 'note', 'diary', 'talk', 'setting']
 const CHAT_MODEL = '@cf/google/gemma-4-26b-a4b-it'
 const CHAT_ROLES = ['system', 'user', 'assistant']
 const MAX_MESSAGES = 20
@@ -25,6 +25,7 @@ const MAX_ROWS = 100
 const MAX_BODY = 1_000_000
 const CLOCK_SKEW = 60_000
 const MIN_KEY_LENGTH = 32
+const TALK_DAYS = 7
 const BACKUP_DAYS = 30
 const BACKUP_PAGE = 1000
 
@@ -56,7 +57,9 @@ export default {
   },
 
   async scheduled(controller, env) {
-    await backup(env, new Date(controller.scheduledTime))
+    const now = new Date(controller.scheduledTime)
+    await expireTalk(env, now)
+    await backup(env, now)
   },
 } satisfies ExportedHandler<Env>
 
@@ -196,6 +199,20 @@ function timestamp(value: unknown) {
   const time = typeof value === 'string' ? Date.parse(value) : NaN
   if (!(time >= 0 && time < Date.UTC(9999, 0))) throw new HttpError(400, '시각 형식이 잘못됐습니다.')
   return new Date(time).toISOString()
+}
+
+/** 오래된 대화의 내용을 지운다. 빈 행은 다른 기기에 알리기 위해 둔다. */
+async function expireTalk(env: Env, now: Date) {
+  const oldest = new Date(now.getTime() - TALK_DAYS * 86_400_000).toISOString()
+  const { results } = await env.DB.prepare(
+    "SELECT id, kind, created_at FROM records WHERE kind = 'talk' AND deleted_at IS NULL AND created_at < ?1",
+  )
+    .bind(oldest)
+    .all<Pick<Row, 'id' | 'kind' | 'created_at'>>()
+  if (!results.length) return
+  const at = now.toISOString()
+  const rows = results.map((row) => ({ ...row, data: { purged: true }, updated_at: at, deleted_at: at }))
+  await env.DB.prepare(UPSERT).bind(JSON.stringify(rows)).run()
 }
 
 /** 앱의 "백업 가져오기"로 바로 읽을 수 있는 형식으로 저장한다. */

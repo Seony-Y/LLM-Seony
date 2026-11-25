@@ -17,7 +17,7 @@ export async function requestWidgetPin(): Promise<void> {
   await roomWidget.requestPin()
 }
 
-/** 위젯의 "맡기기"를 눌러 앱이 열렸을 때 부른다. */
+/** 위젯의 "대화하기"를 눌러 앱이 열렸을 때 부른다. */
 export function onWidgetPrompt(listener: () => void): () => void {
   if (!Capacitor.isNativePlatform()) return () => {}
   const handle = roomWidget.addListener('prompt', listener)

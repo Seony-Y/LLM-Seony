@@ -1,31 +1,58 @@
 import { DIARY_HOUR, diaryBody, localDate, type DayState } from './speech'
-import type { AssistantRecord } from '../records/types'
+import type { AssistantRecord, Turn } from '../records/types'
 
-interface DiaryEntry {
+export interface DiaryEntry {
   date: string
+  /** 연결이 안 될 때 쓰는 글. */
   body: string
+  /** 그날의 모습과 대화. */
+  state: DayState
+  turns: Turn[]
+}
+
+export function diaryEntry(state: DayState, talk: Turn[]): DiaryEntry {
+  const date = localDate(state.now)
+  const turns = talk.filter(({ at }) => localDate(new Date(at)) === date)
+  return { date, body: diaryBody(state), state, turns }
+}
+
+export function lastTurnAt({ turns }: DiaryEntry) {
+  return turns.at(-1)?.at ?? ''
 }
 
 /** 지금 써야 할 일기. 밤 10시 이후에는 오늘 것, 그리고 앱을 열지 않아 빠진 어제 것. */
-export function pendingDiaries(state: DayState, written: AssistantRecord<'diary'>[]): DiaryEntry[] {
+export function pendingDiaries(
+  state: DayState,
+  written: AssistantRecord<'diary'>[],
+  talk: Turn[] = [],
+  connected = false,
+): DiaryEntry[] {
   const entries: DiaryEntry[] = []
-  const bodyOf = (date: string) => written.find(({ data }) => data.date === date)?.data.body
 
   const yesterday = new Date(state.now)
   yesterday.setDate(yesterday.getDate() - 1)
   yesterday.setHours(23, 59, 59, 999)
-  const usedByThen = [...state.events, ...state.todos].some(
-    ({ createdAt }) => Date.parse(createdAt) <= yesterday.getTime(),
-  )
-  if (usedByThen && bodyOf(localDate(yesterday)) === undefined) {
-    entries.push({ date: localDate(yesterday), body: diaryBody(stateAt(yesterday, state)) })
+  const last = diaryEntry(stateAt(yesterday, state), talk)
+  const usedByThen =
+    last.turns.length > 0 ||
+    [...state.events, ...state.todos].some(({ createdAt }) => Date.parse(createdAt) <= yesterday.getTime())
+  const saved = written.find(({ data }) => data.date === last.date)?.data
+  if (usedByThen && (!saved || (connected && (!saved.written || saved.written.until < lastTurnAt(last))))) {
+    entries.push(last)
   }
 
   if (state.now.getHours() >= DIARY_HOUR) {
-    const today = { date: localDate(state.now), body: diaryBody(state) }
-    if (bodyOf(today.date) !== today.body) entries.push(today)
+    const today = diaryEntry(state, talk)
+    if (needsWriting(today, written, connected)) entries.push(today)
   }
   return entries
+}
+
+function needsWriting(entry: DiaryEntry, written: AssistantRecord<'diary'>[], connected: boolean) {
+  const saved = written.find(({ data }) => data.date === entry.date)?.data
+  if (!saved) return true
+  if (!saved.written) return connected || saved.body !== entry.body
+  return connected && (saved.written.until < lastTurnAt(entry) || saved.written.rule !== entry.body)
 }
 
 /** 그 시각에 있던 할 일만 남기고, 나중에 끝낸 것은 아직 안 끝난 것으로 되돌린다. */

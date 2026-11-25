@@ -1,5 +1,6 @@
 import { recall } from '../../recall/recall'
 import { postChat, type ChatMessage } from '../../records/serverRecords'
+import type { Turn } from '../../records/types'
 import type { AnswerSource } from '../answer'
 import { CLOSE_LEVEL, eventsFrom, formatTime, openTodos, weatherLine } from '../speech'
 
@@ -10,16 +11,11 @@ const NOTE_LIMIT = 30
 const ITEM_LENGTH = 120
 const MESSAGE_LENGTH = 800
 
-export interface Turn {
-  question: string
-  reply: string
-}
-
 /** 지난 대화와 기록을 함께 보내 이어서 이야기한다. turns는 오래된 것부터. */
 export async function requestChat(
   accessKey: string,
   text: string,
-  turns: Turn[],
+  turns: Pick<Turn, 'question' | 'reply'>[],
   source: AnswerSource,
 ): Promise<string> {
   const messages: ChatMessage[] = [{ role: 'system', content: persona(text, source) }]

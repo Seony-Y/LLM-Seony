@@ -33,7 +33,7 @@ export function formatTime(date: Date) {
   return new Intl.DateTimeFormat('ko-KR', { hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
-function eventsOn(day: Date, events: AssistantRecord<'event'>[]) {
+export function eventsOn(day: Date, events: AssistantRecord<'event'>[]) {
   return events
     .filter((event) => isSameDay(event.data.startsAt, day))
     .sort((left, right) => left.data.startsAt.localeCompare(right.data.startsAt))
@@ -58,7 +58,7 @@ export function dueTodos(day: Date, todos: AssistantRecord<'todo'>[]) {
   return openTodos(todos).filter(({ data }) => !data.dueDate || data.dueDate <= localDate(day))
 }
 
-function doneOn(day: Date, todos: AssistantRecord<'todo'>[]) {
+export function doneOn(day: Date, todos: AssistantRecord<'todo'>[]) {
   return todos.filter((todo) => todo.data.doneAt && isSameDay(todo.data.doneAt, day))
 }
 

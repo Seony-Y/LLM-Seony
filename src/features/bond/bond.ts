@@ -33,7 +33,7 @@ export function bondOf(records: AssistantRecord[]): Bond {
     daily.set(day, (daily.get(day) ?? 0) + points)
   }
   for (const record of records) {
-    if (record.kind === 'setting') continue
+    if (record.kind === 'setting' || record.kind === 'talk') continue
     add(record.createdAt, 1)
     const doneAt = record.kind === 'todo' ? record.data.doneAt : null
     if (doneAt) add(doneAt, DONE_POINTS)
