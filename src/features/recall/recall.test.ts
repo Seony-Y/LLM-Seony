@@ -82,3 +82,13 @@ test('일정에 나온 사람에 대한 기억을 찾는다', () => {
   expect(related('업무 회의')).toEqual([])
   expect(related('저녁')).toEqual([])
 })
+
+test('할 날을 물으면 그날 할 일만 답한다', () => {
+  const todos = [
+    record('todo', { title: '나중 일', doneAt: null, dueDate: '2026-11-30' }),
+    record('todo', { title: '오늘 일', doneAt: null, dueDate: '2026-11-24' }),
+  ]
+  const found = (question: string) => recall(question, { ...source, todos }).map(({ text }) => text)
+  expect(found('오늘 할 일 뭐야?')).toEqual(['오늘 일'])
+  expect(found('할 일 뭐 남았어?')).toEqual(['오늘 일', '나중 일'])
+})

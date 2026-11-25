@@ -11,6 +11,7 @@
   --action: #45424d;
   --on-action: #fff;
   --edge: #e3dfe6;
+  --late: #b8452f;
   --hand: 'Hi Melody', cursive;
   color-scheme: light;
   font: 16px/1.6 'Gowun Dodum', sans-serif;
@@ -56,6 +57,7 @@
   --action: #f3c878;
   --on-action: #3b2f3d;
   --edge: #262548;
+  --late: #ff9d8a;
   color-scheme: dark;
 }
 
@@ -63,10 +65,13 @@
   box-sizing: border-box;
 }
 
-html,
-body,
+body {
+  height: var(--viewport, 100dvh);
+  overflow: hidden;
+}
+
 #root {
-  min-height: 100%;
+  height: 100%;
 }
 
 body {

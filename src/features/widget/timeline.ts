@@ -1,4 +1,4 @@
-import { DIARY_HOUR, formatTime, greeting, localDate, sceneFor, type DayState, type Scene } from '../assistant/speech'
+import { DIARY_HOUR, dueTodos, formatTime, greeting, localDate, sceneFor, type DayState, type Scene } from '../assistant/speech'
 
 export interface WidgetEntry {
   /** 이 시각부터 보여준다. */
@@ -59,7 +59,7 @@ function entryAt(now: Date, state: DayState): WidgetEntry {
     scene: sceneFor(moment),
     ...greeting(moment),
     events,
-    todos: state.todos.filter(({ data }) => !data.doneAt).length,
+    todos: dueTodos(now, state.todos).length,
   }
 }
 

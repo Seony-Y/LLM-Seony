@@ -39,8 +39,23 @@ function eventsOn(day: Date, events: AssistantRecord<'event'>[]) {
     .sort((left, right) => left.data.startsAt.localeCompare(right.data.startsAt))
 }
 
-function openTodos(todos: AssistantRecord<'todo'>[]) {
-  return todos.filter((todo) => !todo.data.doneAt)
+export function eventsFrom(now: Date, events: AssistantRecord<'event'>[]) {
+  return events
+    .filter((event) => new Date(event.data.startsAt) >= now)
+    .sort((left, right) => left.data.startsAt.localeCompare(right.data.startsAt))
+}
+
+/** 끝내지 않은 일. 급한 것부터, 날짜가 없는 것은 뒤에 둔다. */
+export function openTodos(todos: AssistantRecord<'todo'>[]) {
+  const due = ({ data }: AssistantRecord<'todo'>) => data.dueDate ?? '9999'
+  return todos
+    .filter((todo) => !todo.data.doneAt)
+    .sort((left, right) => due(left).localeCompare(due(right)))
+}
+
+/** 그날까지 해야 하는 일. 날짜가 없으면 언제나 남은 일로 본다. */
+export function dueTodos(day: Date, todos: AssistantRecord<'todo'>[]) {
+  return openTodos(todos).filter(({ data }) => !data.dueDate || data.dueDate <= localDate(day))
 }
 
 function doneOn(day: Date, todos: AssistantRecord<'todo'>[]) {
@@ -60,7 +75,7 @@ export function greeting(state: DayState): Line {
   const name = settings.userName
   const today = eventsOn(now, state.events)
   const next = today.find((event) => new Date(event.data.startsAt) > now)
-  const open = openTodos(state.todos).length
+  const open = dueTodos(now, state.todos).length
   const done = doneOn(now, state.todos).length
   const diaryWritten = now.getHours() >= DIARY_HOUR
 
@@ -123,7 +138,7 @@ export function greeting(state: DayState): Line {
 
 export const DIARY_HOUR = 22
 /** 이 단계부터 인사말이 반말이 된다. */
-const CLOSE_LEVEL = 3
+export const CLOSE_LEVEL = 3
 const BOND_LINES: { level: number; line: Line }[] = [
   { level: 1, line: { title: '컵 생겼어요!', body: '차 한 잔 하고 갈래요?' } },
   { level: 2, line: { title: '{u} 목소리 들으니 좋네요.', body: '풍선 잘 어울리죠?' } },
@@ -169,7 +184,7 @@ export function diaryBody({ now, settings, events, todos }: DayState): string {
   const nag = settings.tone === 'nag'
   const count = eventsOn(now, events).length
   const done = doneOn(now, todos)
-  const oldest = openTodos(todos).sort((left, right) =>
+  const oldest = dueTodos(now, todos).sort((left, right) =>
     left.createdAt.localeCompare(right.createdAt),
   )[0]
 
@@ -194,7 +209,7 @@ export function briefing(
   { settings, events, todos }: Pick<DayState, 'settings' | 'events' | 'todos'>,
 ): Line {
   const [first, ...others] = eventsOn(day, events)
-  const open = openTodos(todos).length
+  const open = dueTodos(day, todos).length
   const parts = ['잡힌 일정은 없어요']
   if (first) {
     const time = formatTime(new Date(first.data.startsAt))

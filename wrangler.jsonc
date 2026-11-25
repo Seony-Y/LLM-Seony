@@ -16,6 +16,7 @@
     }
   ],
   "kv_namespaces": [{ "binding": "BACKUPS" }],
+  "ai": { "binding": "AI" },
   // 매일 한국 시각 새벽 3시에 백업한다.
   "triggers": { "crons": ["0 18 * * *"] }
 }

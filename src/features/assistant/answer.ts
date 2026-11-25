@@ -10,6 +10,8 @@ export interface Answer {
   /** 화면이 대신 해야 하는 일. */
   action?: { type: 'writeDiary'; date: string; body: string } | { type: 'loadWeather' }
   unknown?: boolean
+  /** 앱이 직접 아는 답이라 AI에게 묻지 않는다. */
+  direct?: boolean
 }
 
 export interface AnswerSource extends DayState {
@@ -31,8 +33,8 @@ const TITLE_LENGTH = 14
 const HELP = [
   '이렇게 말해보세요.',
   '· 내일 3시 업무 회의 → 일정',
-  '· 영양제 먹기 → 할 일',
-  '· 주차는 B2 17번 → 기억',
+  '· 내일까지 영양제 사기 → 할 일',
+  '· 주차는 B2 17번 기억해줘 → 기억',
   '· 주차 어디 했지? → 기억 찾기',
   '· 내일 일정 뭐야? → 일정 보기',
   '· 일기 써줘, 오늘 날씨 어때?',
@@ -78,6 +80,7 @@ export function answer(question: string, source: AnswerSource): Answer {
   if (/일기/.test(text) && /써|쓰|적어|작성/.test(text)) {
     const body = diaryBody(source)
     return {
+      direct: true,
       title: '오늘 일기 썼어요.',
       text: body,
       action: { type: 'writeDiary', date: localDate(now), body },
@@ -86,23 +89,25 @@ export function answer(question: string, source: AnswerSource): Answer {
   if (/일기/.test(text)) {
     const latest = diaries[0]
     return latest
-      ? { title: '여기 있어요.', text: `${latest.data.date}\n${latest.data.body}` }
-      : { title: '아직 없어요.', text: '아직 쓴 일기가 없어요. "일기 써줘"라고 하면 바로 쓸게요.' }
+      ? { direct: true, title: '여기 있어요.', text: `${latest.data.date}\n${latest.data.body}` }
+      : { direct: true, title: '아직 없어요.', text: '아직 쓴 일기가 없어요. "일기 써줘"라고 하면 바로 쓸게요.' }
   }
 
   if (/날씨|기온|몇\s*도|우산|비\s*(?:와|오|올)/.test(text)) {
-    if (!weather) return { title: '잠깐만요.', text: '날씨를 확인하고 있어요.', action: { type: 'loadWeather' } }
+    if (!weather) {
+      return { direct: true, title: '잠깐만요.', text: '날씨를 확인하고 있어요.', action: { type: 'loadWeather' } }
+    }
     const line = weatherLine(weather, now)
-    return { title: '날씨 봤어요.', text: `${line.title} ${line.body}` }
+    return { direct: true, title: '날씨 봤어요.', text: `${line.title} ${line.body}` }
   }
 
-  if (/^(?:지금\s*)?(?:몇\s*시|시간)/.test(text)) return same(`지금은 ${formatTime(now)}이에요.`)
+  if (/^(?:지금\s*)?(?:몇\s*시|시간)/.test(text)) return { direct: true, ...same(`지금은 ${formatTime(now)}이에요.`) }
   if (/^(?:오늘(?:은|이)?\s*)?(?:며칠|몇\s*월|무슨\s*요일|날짜)/.test(text)) {
     const date = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(now)
-    return same(`오늘은 ${date}이에요.`)
+    return { direct: true, ...same(`오늘은 ${date}이에요.`) }
   }
   if (/도움말|사용법|기능|(?:뭐|뭘|무엇을?|무슨\s*일).*(?:할\s*수|해\s*줄)/.test(text)) {
-    return { title: '이런 걸 할 수 있어요.', text: HELP }
+    return { direct: true, title: '이런 걸 할 수 있어요.', text: HELP }
   }
 
   const items = recall(text, source)

@@ -2,6 +2,7 @@ export interface Env {
   DB: D1Database
   BACKUPS: KVNamespace
   ACCESS_KEY: string
+  AI: { run(model: string, input: object): Promise<unknown> }
 }
 
 interface Row {
@@ -14,6 +15,11 @@ interface Row {
 }
 
 const KINDS = ['event', 'todo', 'note', 'diary', 'setting']
+const CHAT_MODEL = '@cf/google/gemma-4-26b-a4b-it'
+const CHAT_ROLES = ['system', 'user', 'assistant']
+const MAX_MESSAGES = 20
+const MAX_CHAT_LENGTH = 30_000
+const MAX_REPLY_TOKENS = 300
 const APP_ORIGIN = 'https://localhost'
 const MAX_ROWS = 100
 const MAX_BODY = 1_000_000
@@ -73,6 +79,8 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
     case 'POST /api/records':
       await env.DB.prepare(UPSERT).bind(JSON.stringify(await readRows(request))).run()
       return new Response(null, { status: 204 })
+    case 'POST /api/chat':
+      return Response.json({ text: await chat(await readMessages(request), env) })
     case 'GET /api/backups': {
       const { keys } = await env.BACKUPS.list()
       return Response.json(keys.map(({ name }) => name))
@@ -110,15 +118,52 @@ async function pull(url: URL, env: Env) {
   return results.map((row) => ({ ...row, data: JSON.parse(row.data) as unknown }))
 }
 
-async function readRows(request: Request): Promise<Row[]> {
+interface Message {
+  role: string
+  content: string
+}
+
+async function readMessages(request: Request): Promise<Message[]> {
+  const messages = await readJson(request)
+  const valid =
+    Array.isArray(messages) &&
+    messages.length > 0 &&
+    messages.length <= MAX_MESSAGES &&
+    messages.every((item) => CHAT_ROLES.includes(item?.role) && typeof item.content === 'string')
+  if (!valid) throw new HttpError(400, '대화 형식이 잘못됐습니다.')
+  const list = (messages as Message[]).map(({ role, content }) => ({ role, content }))
+  if (list.reduce((sum, { content }) => sum + content.length, 0) > MAX_CHAT_LENGTH) {
+    throw new HttpError(413, '대화가 너무 깁니다.')
+  }
+  return list
+}
+
+async function chat(messages: Message[], env: Env): Promise<string> {
+  const reply = (await env.AI.run(CHAT_MODEL, {
+    messages,
+    max_tokens: MAX_REPLY_TOKENS,
+    chat_template_kwargs: { enable_thinking: false },
+  }).catch((error: unknown) => {
+    console.error(error)
+    return null
+  })) as { choices?: { message?: { content?: string | null } }[] } | null
+  const text = reply?.choices?.[0]?.message?.content?.trim()
+  if (!text) throw new HttpError(502, '지금은 AI가 답하지 못합니다.')
+  return text
+}
+
+async function readJson(request: Request): Promise<unknown> {
   const text = await request.text()
   if (text.length > MAX_BODY) throw new HttpError(413, '한 번에 보낼 수 있는 양을 넘었습니다.')
-  let rows: unknown
   try {
-    rows = JSON.parse(text)
+    return JSON.parse(text)
   } catch {
-    rows = null
+    return null
   }
+}
+
+async function readRows(request: Request): Promise<Row[]> {
+  const rows = await readJson(request)
   if (!Array.isArray(rows) || rows.length > MAX_ROWS) throw new HttpError(400, '기록 형식이 잘못됐습니다.')
   return rows.map(normalize)
 }

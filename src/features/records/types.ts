@@ -1,6 +1,7 @@
 export interface RecordData {
   event: { title: string; note: string; startsAt: string; remind: boolean }
-  todo: { title: string; doneAt: string | null }
+  /** dueDate는 YYYY-MM-DD. 예전 기록에는 없다. */
+  todo: { title: string; doneAt: string | null; dueDate?: string }
   note: { body: string }
   diary: { date: string; body: string }
   setting: { assistantName: string; userName: string; tone: Tone; briefing: boolean }

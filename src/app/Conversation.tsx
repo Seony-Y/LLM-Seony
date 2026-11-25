@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Recalled } from '../features/recall/recall'
-import type { Draft } from './ConfirmCard'
+import { ConfirmCard, type Draft } from './ConfirmCard'
 import { ConfirmModal } from './ConfirmModal'
 import { formatDay } from './dates'
 
@@ -12,18 +12,20 @@ export interface Exchange {
   items?: Recalled[]
   /** 모르는 말이라 다음에 할 일을 고를 수 있다. */
   unknown?: boolean
-  fromAi?: boolean
   /** 맡기는 말로 보여 되물은 것. */
   proposal?: Draft
 }
 
 interface ConversationProps {
+  /** 최근 것이 앞. */
   exchanges: Exchange[]
+  /** 서버에 연결되어 AI와 이야기할 수 있다. */
+  connected: boolean
   now: Date
   thinking: boolean
   onAskAi: (exchange: Exchange) => void
-  onKeep: (exchange: Exchange) => void
-  onAccept: (exchange: Exchange) => void
+  onConfirm: (exchange: Exchange, draft: Draft) => Promise<void>
+  onDecline: (exchange: Exchange) => void
   onRemove: (exchange: Exchange) => void
   onClear: () => void
 }
@@ -32,28 +34,43 @@ const KIND = { event: '일정', todo: '할 일', note: '기억' }
 
 export function Conversation({
   exchanges,
+  connected,
   now,
   thinking,
   onAskAi,
-  onKeep,
-  onAccept,
+  onConfirm,
+  onDecline,
   onRemove,
   onClear,
 }: ConversationProps) {
   const [clearing, setClearing] = useState(false)
+  const list = useRef<HTMLOListElement>(null)
+
+  // 새 말이나 늦게 온 답이 보이도록 맨 아래로 내린다.
+  useEffect(() => {
+    const scroll = list.current?.closest('.scroll')
+    scroll?.scrollTo({ top: scroll.scrollHeight })
+  }, [exchanges])
 
   if (!exchanges.length) {
-    return <p className="empty">궁금한 걸 물어보세요. "내일 일정 뭐야?", "주차 어디 했지?"</p>
+    return (
+      <p className="empty">
+        {connected
+          ? '오늘 있었던 일이나 궁금한 걸 편하게 말해보세요. "내일 3시 업무 회의"처럼 말하면 넣어둘게요.'
+          : '설정에서 서버와 연결하면 편하게 이야기할 수 있어요. 지금은 기록만 찾아줄게요.'}
+      </p>
+    )
   }
   return (
     <>
       <div className="conversation-tools">
+        <small>AI의 답은 틀릴 수 있어요</small>
         <button type="button" onClick={() => setClearing(true)}>
           대화 모두 지우기
         </button>
       </div>
-      <ol className="conversation" aria-live="polite">
-        {exchanges.map((exchange) => (
+      <ol className="conversation" aria-live="polite" ref={list}>
+        {exchanges.toReversed().map((exchange) => (
           <li key={exchange.id}>
             <div className="asked-row">
               <button
@@ -76,31 +93,25 @@ export function Conversation({
                         {item.text}
                         <small>
                           {KIND[item.kind]} · {formatDay(item.at, now)}
-                          {item.kind === 'event' ? '' : ' 맡김'}
+                          {item.kind === 'event' ? '' : item.due ? '까지' : ' 맡김'}
                         </small>
                       </div>
                     </li>
                   ))}
                 </ul>
               )}
-              {exchange.fromAi && <small>AI가 만든 답이라 틀릴 수 있어요.</small>}
             </div>
             {exchange.proposal && (
-              <div className="actions">
-                <button type="button" onClick={() => onAccept(exchange)}>
-                  네, 맡길게요
-                </button>
-              </div>
+              <ConfirmCard
+                draft={exchange.proposal}
+                onConfirm={(draft) => onConfirm(exchange, draft)}
+                onCancel={() => onDecline(exchange)}
+              />
             )}
-            {exchange.unknown && (
+            {exchange.unknown && Capacitor.isNativePlatform() && (
               <div className="actions">
-                {Capacitor.isNativePlatform() && (
-                  <button type="button" disabled={thinking} onClick={() => onAskAi(exchange)}>
-                    {thinking ? '생각하는 중' : 'AI에게 물어보기'}
-                  </button>
-                )}
-                <button type="button" onClick={() => onKeep(exchange)}>
-                  이 말 기억해 두기
+                <button type="button" disabled={thinking} onClick={() => onAskAi(exchange)}>
+                  {thinking ? '생각하는 중' : '폰 AI에게 물어보기'}
                 </button>
               </div>
             )}

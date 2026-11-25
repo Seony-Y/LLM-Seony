@@ -3,13 +3,24 @@ import { env } from '../../shared/config/env'
 import type { RemoteRecords, RemoteRow } from './sync'
 
 const TIMEOUT = 15_000
+const CHAT_TIMEOUT = 30_000
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
 /** 웹은 앱을 내려준 서버를 그대로 쓰고, 폰 앱은 빌드할 때 정한 주소를 쓴다. */
 export const serverConfigured = !Capacitor.isNativePlatform() || env.serverUrl !== ''
 
 export class ServerError extends Error {}
 
-async function call(accessKey: string, path: string, body?: unknown): Promise<Response> {
+async function call(
+  accessKey: string,
+  path: string,
+  body?: unknown,
+  timeout = TIMEOUT,
+): Promise<Response> {
   const base = Capacitor.isNativePlatform() ? env.serverUrl : ''
   let response: Response
   try {
@@ -20,7 +31,7 @@ async function call(accessKey: string, path: string, body?: unknown): Promise<Re
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT),
+      signal: AbortSignal.timeout(timeout),
     })
   } catch {
     throw new ServerError('서버에 연결하지 못했습니다. 연결되면 다시 보낼게요.')
@@ -55,4 +66,9 @@ export function serverRecords(accessKey: string): RemoteRecords {
       return readJson<RemoteRow[]>(await call(accessKey, `records?after=${afterSeq}`))
     },
   }
+}
+
+export async function postChat(accessKey: string, messages: ChatMessage[]): Promise<string> {
+  const { text } = await readJson<{ text: string }>(await call(accessKey, 'chat', messages, CHAT_TIMEOUT))
+  return text
 }
