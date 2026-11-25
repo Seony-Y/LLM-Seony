@@ -4,6 +4,7 @@ import type { RemoteRecords, RemoteRow } from './sync'
 
 const TIMEOUT = 15_000
 const CHAT_TIMEOUT = 30_000
+const PRECISE_TIMEOUT = 10_000
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -68,7 +69,13 @@ export function serverRecords(accessKey: string): RemoteRecords {
   }
 }
 
-export async function postChat(accessKey: string, messages: ChatMessage[]): Promise<string> {
-  const { text } = await readJson<{ text: string }>(await call(accessKey, 'chat', messages, CHAT_TIMEOUT))
+/** precise는 매번 같은 답이 필요할 때. */
+export async function postChat(
+  accessKey: string,
+  messages: ChatMessage[],
+  precise = false,
+): Promise<string> {
+  const path = precise ? 'chat?precise=1' : 'chat'
+  const { text } = await readJson<{ text: string }>(await call(accessKey, path, messages, precise ? PRECISE_TIMEOUT : CHAT_TIMEOUT))
   return text
 }

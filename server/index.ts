@@ -83,7 +83,7 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
       await env.DB.prepare(UPSERT).bind(JSON.stringify(await readRows(request))).run()
       return new Response(null, { status: 204 })
     case 'POST /api/chat':
-      return Response.json({ text: await chat(await readMessages(request), env) })
+      return Response.json({ text: await chat(await readMessages(request), url.searchParams.has('precise'), env) })
     case 'GET /api/backups': {
       const { keys } = await env.BACKUPS.list()
       return Response.json(keys.map(({ name }) => name))
@@ -141,10 +141,11 @@ async function readMessages(request: Request): Promise<Message[]> {
   return list
 }
 
-async function chat(messages: Message[], env: Env): Promise<string> {
+async function chat(messages: Message[], precise: boolean, env: Env): Promise<string> {
   const reply = (await env.AI.run(CHAT_MODEL, {
     messages,
     max_tokens: MAX_REPLY_TOKENS,
+    temperature: precise ? 0 : 0.6,
     chat_template_kwargs: { enable_thinking: false },
   }).catch((error: unknown) => {
     console.error(error)

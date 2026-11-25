@@ -11,6 +11,8 @@ export interface Exchange extends Turn {
   unknown?: boolean
   /** 맡기는 말로 보여 되물은 것. */
   proposal?: Draft
+  /** AI가 이야기하다 제안한 것이라 하던 말은 남긴다. */
+  suggested?: boolean
 }
 
 interface ConversationProps {

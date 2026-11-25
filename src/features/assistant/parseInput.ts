@@ -124,6 +124,11 @@ function isPast(text: string) {
   )
 }
 
+/** 제목만 남지 않고 하던 말이 섞여 있다. "치과 가야 하는데 걱정돼" */
+export function isSpoken(title: string) {
+  return /\s/.test(title) && /(?:어|아|해|돼|네|데|다|지|야|봐|까|래|고|서|요|죠|든|겠)$/.test(title)
+}
+
 const SHARED_TITLE = 100
 
 /** 다른 앱에서 받은 글은 명령으로 보지 않고, 시간이 있으면 일정으로 아니면 기억으로 제안한다. */
