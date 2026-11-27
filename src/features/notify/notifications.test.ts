@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { defaultSettings, type AssistantRecord } from '../records/types'
-import { planNotifications } from './notifications'
+import { planNotifications, snooze, snoozed } from './notifications'
 
 const now = new Date(2026, 10, 24, 10, 0)
 
@@ -149,4 +149,29 @@ test('생일 같은 날은 사흘 전과 그날 아침 9시에 알린다', () =>
     new Date(2027, 10, 21, 9),
     new Date(2027, 10, 24, 9),
   ])
+})
+
+test('일정과 출발 알림에는 다시 알림, 할 일이 하나뿐인 알림에는 끝냄 버튼을 단다', () => {
+  const todos = [todo('장보기', '2026-11-24')]
+  const planned = planNotifications({ now, settings: defaultSettings, events: [event('회의', new Date(2026, 10, 24, 11))], todos })
+  expect(planned.find(({ title }) => title === '회의')?.actionTypeId).toBe('later')
+  const reminder = planned.find(({ title }) => title.startsWith('아직 남은 일'))
+  expect(reminder).toMatchObject({ actionTypeId: 'todo-one', extra: { todoId: '장보기' } })
+  const many = planNotifications({ now, settings: defaultSettings, events: [], todos: [...todos, todo('청소', '2026-11-24')] })
+  expect(many.find(({ title }) => title.startsWith('아직 남은 일'))?.actionTypeId).toBeUndefined()
+})
+
+test('미룬 알림은 10분 뒤에 다시 울리고, 지난 것은 버린다', () => {
+  const saved = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => saved.set(key, value),
+  })
+  try {
+    snooze({ id: 1, title: '회의', body: '지금이에요.' }, now)
+    expect(snoozed(now)).toMatchObject([{ title: '회의', schedule: { at: new Date(2026, 10, 24, 10, 10) }, actionTypeId: 'later' }])
+    expect(snoozed(new Date(2026, 10, 24, 10, 11))).toEqual([])
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })

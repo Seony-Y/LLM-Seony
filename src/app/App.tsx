@@ -17,7 +17,14 @@ import {
   type Line,
 } from '../features/assistant/speech'
 import { canListen, composeMessage, dial, listen, onSharedText, shareToKakao } from '../features/device/deviceActions'
-import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
+import {
+  applyNotifications,
+  onNotificationAction,
+  registerNotificationActions,
+  requestNotificationPermission,
+  snooze,
+} from '../features/notify/notifications'
+import { toggleTodo } from '../features/records/todoStore'
 import {
   getTodayWeather,
   hasWeatherPermission,
@@ -103,6 +110,8 @@ function App() {
   const [focus, setFocus] = useState({ target: roomTarget('event'), count: 0 })
   const [prompt, setPrompt] = useState('')
   const [listening, setListening] = useState(false)
+  /** 위젯의 마이크로 앱을 열면 늘어난다. */
+  const [voiceAsks, setVoiceAsks] = useState(0)
   const [travel, setTravel] = useState(() => new Map<string, Travel>())
   const [line, setLine] = useState<Line | null>(null)
   const [pokes, setPokes] = useState(0)
@@ -169,6 +178,30 @@ function App() {
   useEffect(() => {
     latestState.current = state
   }, [state])
+
+  const latestTravel = useRef(travel)
+  useEffect(() => {
+    latestTravel.current = travel
+  }, [travel])
+
+  // 알림의 버튼은 앱을 열어 처리한다. 앱이 꺼져 있었어도 열린 뒤 전달된다.
+  useEffect(() => {
+    void registerNotificationActions().catch(console.error)
+    return onNotificationAction((action, notification) => {
+      if (action === 'later') {
+        snooze(notification)
+        void applyNotifications(latestState.current, latestTravel.current).catch(console.error)
+        setLine({ title: '10분 뒤에 다시 알려줄게요.', body: notification.title })
+        return
+      }
+      if (action !== 'done') return
+      const todo = latestState.current.todos.find(({ id }) => id === notification.extra?.todoId)
+      if (!todo) return
+      if (!todo.data.doneAt) void toggleTodo(todo.id).catch(console.error)
+      setCheers((count) => count + 1)
+      setLine({ title: '하나 끝!', body: `${todo.data.title}, 끝낸 걸로 해뒀어요.` })
+    })
+  }, [])
 
   useLayoutEffect(() => {
     document.documentElement.dataset.scene = scene
@@ -242,15 +275,22 @@ function App() {
 
   useEffect(
     () =>
-      onWidgetPrompt(() => {
+      onWidgetPrompt((voice) => {
         flushSync(() => {
           changeView('talk')
           setRaised(true)
         })
-        promptInput.current?.focus()
+        if (voice) setVoiceAsks((count) => count + 1)
+        else promptInput.current?.focus()
       }),
     [],
   )
+
+  useEffect(() => {
+    if (voiceAsks && canListen) void speak()
+    // 마이크를 누를 때만 듣는다.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceAsks])
 
   /** 대화를 시작하면 시트를 올리고, 다른 기록으로 가면 내린다. */
   function setView(next: View) {

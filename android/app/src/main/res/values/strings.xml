@@ -6,6 +6,7 @@
     <string name="widget_empty">또리예요.</string>
     <string name="widget_empty_body">눌러서 앱을 한 번 열어주세요.</string>
     <string name="widget_prompt">대화하기</string>
+    <string name="widget_voice">말로 하기</string>
     <string name="widget_todos">할 일 %1$d개</string>
     <string name="share_label">또리에게 보내기</string>
     <string name="package_name">com.seony.assistant</string>

@@ -40,8 +40,15 @@ class RoomWidgetPlugin : Plugin() {
     }
 
     private fun deliverPrompt(intent: Intent?) {
-        if (intent?.action != RoomWidget.ACTION_PROMPT) return
+        if (intent == null) return
+        val voice = when (intent.action) {
+            RoomWidget.ACTION_PROMPT -> false
+            RoomWidget.ACTION_VOICE -> true
+            else -> return
+        }
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
-        notifyListeners("prompt", JSObject(), true)
+        // 앱을 처음 열 때는 load와 새 인텐트 처리에서 두 번 불리므로 한 번만 전한다.
+        intent.action = Intent.ACTION_MAIN
+        notifyListeners("prompt", JSObject().put("voice", voice), true)
     }
 }
