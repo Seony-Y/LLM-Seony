@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications'
 import type { AssistantRecord } from '../records/types'
+import { anniversaries } from '../recall/anniversary'
 import { relatedNotes } from '../recall/recall'
 import { briefing, dueTodos, localDate, type DayState } from '../assistant/speech'
 import { TRAVEL_WINDOW } from '../online/travel'
@@ -18,6 +19,12 @@ const MEMORY_LEAD = 30 * 60_000
 const TRAVEL_SPARE = 10 * 60_000
 /** 이보다 가까우면 출발 알림이 필요 없다. */
 const MIN_TRAVEL_MINUTES = 5
+/** 생일 같은 날은 준비할 수 있게 며칠 전과 그날 아침에 알린다. */
+const ANNIVERSARY_HOUR = 9
+const ANNIVERSARY_LEADS = [
+  { days: 3, title: '사흘 뒤, 챙길 날이에요' },
+  { days: 0, title: '오늘, 챙길 날이에요' },
+]
 
 type PlanState = Pick<DayState, 'now' | 'settings' | 'events' | 'todos' | 'notes'> & { weather?: DayState['weather'] }
 
@@ -54,6 +61,21 @@ export function planNotifications(state: PlanState, travel = new Map<string, Tra
       body: `기억하죠? ${memories.join(' · ')}`,
       schedule: { at, allowWhileIdle: true },
     })
+  }
+
+  for (const { note, next } of anniversaries(notes, now)) {
+    for (const lead of ANNIVERSARY_LEADS) {
+      const at = new Date(next)
+      at.setDate(next.getDate() - lead.days)
+      at.setHours(ANNIVERSARY_HOUR, 0, 0, 0)
+      if (at <= now) continue
+      planned.push({
+        id: notificationId(`anniversary:${note.id}:${localDate(next)}:${lead.days}`),
+        title: lead.title,
+        body: note.data.body,
+        schedule: { at, allowWhileIdle: true },
+      })
+    }
   }
 
   // 길 사정은 바뀌므로 곧 있을 일정만 출발 시각을 알린다.
