@@ -19,9 +19,11 @@ interface SettingsProps {
   open: boolean
   updateStatus: UpdateStatus
   onClose: () => void
+  /** 처음 안내를 다시 연다. */
+  onOnboarding: () => void
 }
 
-export function Settings({ records, sync, open, updateStatus, onClose }: SettingsProps) {
+export function Settings({ records, sync, open, updateStatus, onClose, onOnboarding }: SettingsProps) {
   const { settings, bond } = records
   const dialog = useRef<HTMLDialogElement>(null)
   const [message, setMessage] = useState('')
@@ -119,6 +121,9 @@ export function Settings({ records, sync, open, updateStatus, onClose }: Setting
           </ul>
         </div>
         {open && <Preferences settings={settings} onSaved={onClose} />}
+        <button type="button" onClick={onOnboarding}>
+          처음 안내 다시 보기
+        </button>
         {isNative && (
           <button type="button" onClick={() => attempt(requestWidgetPin)}>
             홈 화면에 위젯 추가

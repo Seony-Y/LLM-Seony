@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { anniversaries } from '../features/recall/anniversary'
 import { relatedNotes } from '../features/recall/recall'
 import { DIARY_HOUR, localDate, openTodos } from '../features/assistant/speech'
@@ -20,12 +20,14 @@ interface RecordListProps {
   records: Records
   now: Date
   onDone: (title: string) => void
+  /** 할 일을 밀어서 내일로 미뤘을 때. */
+  onPostpone: (title: string) => void
   onEdit: (record: AssistantRecord<AddKind>) => void
   /** 달력에서 고른 날에 일정을 추가한다. */
   onAddOn: (day: string) => void
 }
 
-export function RecordList({ view, records, now, onDone, onEdit, onAddOn }: RecordListProps) {
+export function RecordList({ view, records, now, onDone, onPostpone, onEdit, onAddOn }: RecordListProps) {
   const [removing, setRemoving] = useState<AssistantRecord<'event'> | null>(null)
   const [readingPast, setReadingPast] = useState(false)
   const closePast = useCallback(() => setReadingPast(false), [])
@@ -66,7 +68,14 @@ export function RecordList({ view, records, now, onDone, onEdit, onAddOn }: Reco
     const done = records.todos.filter(({ data }) => data.doneAt)
     const isToday = ({ data }: AssistantRecord<'todo'>) => localDate(new Date(data.doneAt!)) === localDate(now)
     const row = (todo: AssistantRecord<'todo'>) => (
-      <TodoRow key={todo.id} todo={todo} now={now} onDone={onDone} onEdit={() => onEdit(todo)} />
+      <TodoRow
+        key={todo.id}
+        todo={todo}
+        now={now}
+        onDone={onDone}
+        onPostpone={onPostpone}
+        onEdit={() => onEdit(todo)}
+      />
     )
     const past = done.filter((todo) => !isToday(todo))
     return (
@@ -197,12 +206,29 @@ interface TodoRowProps {
   todo: AssistantRecord<'todo'>
   now: Date
   onDone: (title: string) => void
+  onPostpone: (title: string) => void
   onEdit: () => void
 }
 
-function TodoRow({ todo: { id, data }, now, onDone, onEdit }: TodoRowProps) {
+function TodoRow({ todo: { id, data }, now, onDone, onPostpone, onEdit }: TodoRowProps) {
+  async function toggle() {
+    await toggleTodo(id)
+    if (!data.doneAt) onDone(data.title)
+  }
+
+  async function postpone() {
+    const tomorrow = new Date(now)
+    tomorrow.setDate(now.getDate() + 1)
+    await saveRecord('todo', { ...data, dueDate: localDate(tomorrow) }, id)
+    onPostpone(data.title)
+  }
+
   return (
     <Row
+      swipe={{
+        right: { label: data.doneAt ? '되돌리기' : '끝냄', run: toggle },
+        left: data.doneAt ? undefined : { label: '내일로', run: postpone },
+      }}
       title={data.title}
       detail={
         <>
@@ -230,10 +256,7 @@ function TodoRow({ todo: { id, data }, now, onDone, onEdit }: TodoRowProps) {
         className="check"
         type="button"
         aria-label={`${data.title} ${data.doneAt ? '되돌리기' : '끝냄'}`}
-        onClick={async () => {
-          await toggleTodo(id)
-          if (!data.doneAt) onDone(data.title)
-        }}
+        onClick={() => void toggle()}
       >
         <i>
           {data.doneAt && (
@@ -247,19 +270,67 @@ function TodoRow({ todo: { id, data }, now, onDone, onEdit }: TodoRowProps) {
   )
 }
 
+interface SwipeAction {
+  label: string
+  run: () => Promise<void>
+}
+
 interface RowProps {
   title: string
   detail: ReactNode
   memories?: string[]
   done?: boolean
   children?: ReactNode
+  /** 밀어서 하는 일. right는 오른쪽으로 밀 때. */
+  swipe?: { right?: SwipeAction; left?: SwipeAction }
   onEdit: () => void
   onRemove: () => void
 }
 
-function Row({ title, detail, memories, done, children, onEdit, onRemove }: RowProps) {
-  return (
-    <li className={done ? 'done' : undefined}>
+/** 이만큼 밀면 실행한다. */
+const SWIPE_DISTANCE = 80
+
+function Row({ title, detail, memories, done, children, swipe, onEdit, onRemove }: RowProps) {
+  const [offset, setOffset] = useState(0)
+  const [sliding, setSliding] = useState(false)
+  // 놓는 순간에는 다시 그리기 전일 수 있어 마지막으로 민 거리를 따로 둔다.
+  const start = useRef<{ x: number; y: number; sliding: boolean; offset: number } | null>(null)
+  const swiped = useRef(false)
+
+  function move(event: React.PointerEvent) {
+    const from = start.current
+    if (!from) return
+    const x = event.clientX - from.x
+    const y = event.clientY - from.y
+    if (!from.sliding) {
+      // 옆으로 확실히 밀 때만 잡고, 위아래로 움직이면 목록 스크롤에 맡긴다.
+      if (Math.abs(y) > 10 && Math.abs(y) > Math.abs(x)) start.current = null
+      if (Math.abs(x) < 10 || Math.abs(x) < Math.abs(y) * 1.5) return
+      from.sliding = true
+      setSliding(true)
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    const limit = SWIPE_DISTANCE * 1.4
+    from.offset = Math.max(swipe?.left ? -limit : 0, Math.min(swipe?.right ? limit : 0, x))
+    setOffset(from.offset)
+  }
+
+  function release() {
+    const wasSliding = start.current?.sliding
+    const moved = start.current?.offset ?? 0
+    start.current = null
+    setOffset(0)
+    setSliding(false)
+    if (!wasSliding) return
+    // 밀고 놓을 때 생기는 클릭으로 고치기가 열리지 않게 한다.
+    swiped.current = true
+    setTimeout(() => (swiped.current = false))
+    const action = moved >= SWIPE_DISTANCE ? swipe?.right : moved <= -SWIPE_DISTANCE ? swipe?.left : undefined
+    if (action) void action.run().catch(console.error)
+  }
+
+  const content = (
+    <>
       {children}
       <div>
         <button className="row-title" type="button" aria-label={`${title} 고치기`} onClick={onEdit}>
@@ -275,6 +346,42 @@ function Row({ title, detail, memories, done, children, onEdit, onRemove }: RowP
       <button className="remove" type="button" aria-label={`${title} 휴지통으로`} onClick={onRemove}>
         ×
       </button>
+    </>
+  )
+  if (!swipe) return <li className={done ? 'done' : undefined}>{content}</li>
+
+  const reach = Math.min(1, Math.abs(offset) / SWIPE_DISTANCE)
+  return (
+    <li className={['swipeable', done && 'done'].filter(Boolean).join(' ')}>
+      {swipe.right && (
+        <span className="swipe-hint right" aria-hidden="true" style={{ opacity: offset > 0 ? reach : 0 }}>
+          {swipe.right.label}
+        </span>
+      )}
+      {swipe.left && (
+        <span className="swipe-hint left" aria-hidden="true" style={{ opacity: offset < 0 ? reach : 0 }}>
+          {swipe.left.label}
+        </span>
+      )}
+      <div
+        className={sliding ? 'swipe-track sliding' : 'swipe-track'}
+        style={{ transform: offset ? `translateX(${offset}px)` : undefined }}
+        onPointerDown={(event) => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return
+          start.current = { x: event.clientX, y: event.clientY, sliding: false, offset: 0 }
+        }}
+        onPointerMove={move}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onClickCapture={(event) => {
+          if (swiped.current) {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+        }}
+      >
+        {content}
+      </div>
     </li>
   )
 }

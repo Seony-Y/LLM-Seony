@@ -37,7 +37,8 @@ class QuickReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> QuickReminders.restore(context)
-            QuickReminders.ACTION_SHOW -> QuickReminders.show(context, QuickReminders.itemOf(intent))
+            QuickReminders.ACTION_SHOW, QuickReminders.ACTION_SHOW_AGAIN ->
+                QuickReminders.show(context, QuickReminders.itemOf(intent))
             QuickReminders.ACTION_DONE -> {
                 val item = QuickReminders.itemOf(intent)
                 NotificationManagerCompat.from(context).cancel(item.getInt("id"))
@@ -46,7 +47,8 @@ class QuickReminderReceiver : BroadcastReceiver() {
             QuickReminders.ACTION_LATER -> {
                 val item = QuickReminders.itemOf(intent)
                 NotificationManagerCompat.from(context).cancel(item.getInt("id"))
-                QuickReminders.alarm(context, item.put("at", System.currentTimeMillis() + QuickReminders.SNOOZE))
+                val again = item.put("at", System.currentTimeMillis() + QuickReminders.SNOOZE)
+                QuickReminders.alarm(context, again, QuickReminders.ACTION_SHOW_AGAIN)
             }
         }
     }
@@ -54,6 +56,8 @@ class QuickReminderReceiver : BroadcastReceiver() {
 
 object QuickReminders {
     const val ACTION_SHOW = "com.seony.assistant.SHOW_REMINDER"
+    /** 미룬 알림. 앱이 예약을 새로 하면서 지우지 않도록 원래 알림과 따로 건다. */
+    const val ACTION_SHOW_AGAIN = "com.seony.assistant.SHOW_REMINDER_AGAIN"
     const val ACTION_DONE = "com.seony.assistant.REMINDER_DONE"
     const val ACTION_LATER = "com.seony.assistant.REMINDER_LATER"
     const val SNOOZE = 10 * 60_000L
@@ -81,9 +85,9 @@ object QuickReminders {
         }
     }
 
-    fun alarm(context: Context, item: JSONObject) {
+    fun alarm(context: Context, item: JSONObject, action: String = ACTION_SHOW) {
         val manager = alarmManager(context)
-        val intent = pending(context, ACTION_SHOW, item)
+        val intent = pending(context, action, item)
         val at = item.optLong("at")
         if (manager.canScheduleExactAlarms()) {
             manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
