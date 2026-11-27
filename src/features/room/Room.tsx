@@ -13,17 +13,21 @@ interface RoomProps {
   /** 고른 기록. count가 바뀔 때마다 소품이 반응한다. */
   focus: { target: RoomTarget; count: number }
   onTap: (target: RoomTarget) => void
+  /** 방의 물건을 눌렀을 때, 그 물건의 순서. */
+  onGift: (index: number) => void
 }
 
-export function Room({ scene, sky, gifts, hops, cheers, focus, onTap }: RoomProps) {
+export function Room({ scene, sky, gifts, hops, cheers, focus, onTap, onGift }: RoomProps) {
   const container = useRef<HTMLDivElement>(null)
   const tapHandler = useRef(onTap)
+  const giftHandler = useRef(onGift)
   const [diorama, setDiorama] = useState<Diorama | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     tapHandler.current = onTap
-  }, [onTap])
+    giftHandler.current = onGift
+  }, [onTap, onGift])
 
   useEffect(() => {
     let created: Diorama | null = null
@@ -31,7 +35,11 @@ export function Room({ scene, sky, gifts, hops, cheers, focus, onTap }: RoomProp
     import('./diorama')
       .then(({ createDiorama }) => {
         if (cancelled || !container.current) return
-        created = createDiorama(container.current, (target) => tapHandler.current(target))
+        created = createDiorama(
+          container.current,
+          (target) => tapHandler.current(target),
+          (index) => giftHandler.current(index),
+        )
         setDiorama(created)
       })
       .catch((error) => {

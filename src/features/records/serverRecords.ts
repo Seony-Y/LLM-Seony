@@ -75,12 +75,25 @@ export interface Travel {
   minutes: number
 }
 
-export async function postTravel(
-  accessKey: string,
-  from: { latitude: number; longitude: number },
-  to: string,
-): Promise<Travel> {
-  return readJson<Travel>(await call(accessKey, 'travel', { from, to }))
+export interface Coords {
+  latitude: number
+  longitude: number
+}
+
+/** 장소 검색 후보. */
+export interface PlaceOption extends Coords {
+  name: string
+  address: string
+}
+
+/** at은 검색에서 고른 장소의 좌표. 없으면 서버가 이름으로 찾는다. */
+export async function postTravel(accessKey: string, from: Coords, to: string, at?: Coords): Promise<Travel> {
+  return readJson<Travel>(await call(accessKey, 'travel', { from, to, at }))
+}
+
+/** near가 있으면 가까운 곳부터. */
+export async function searchPlaces(accessKey: string, query: string, near?: Coords): Promise<PlaceOption[]> {
+  return readJson<PlaceOption[]>(await call(accessKey, 'places', { query, near }))
 }
 
 /** precise는 매번 같은 답이 필요할 때. */

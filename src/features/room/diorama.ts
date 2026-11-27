@@ -27,7 +27,20 @@ const LIGHT: Record<Scene, { color: string; sun: number; sky: number; exposure: 
 }
 
 const RAIN_COUNT = 130
-const SECONDS = { assistant: 0.6, books: 0.9, calendar: 1.1, plant: 0.8, checklist: 1.4, sky: 0.8 }
+const SECONDS = {
+  assistant: 0.6,
+  books: 0.9,
+  calendar: 1.1,
+  plant: 0.8,
+  checklist: 1.4,
+  sky: 0.8,
+  mug: 1.2,
+  balloon: 1.6,
+  bird: 1.2,
+  crown: 1.2,
+}
+/** 방의 물건 순서. 친밀도의 물건 순서와 같다. */
+const GIFT_EFFECTS = ['mug', 'balloon', 'bird', 'crown'] as const
 const CONFETTI = ['#e98a6c', '#f2b36f', '#8fb3bd', '#bfdc8c', '#f0a39a']
 
 type Effect = keyof typeof SECONDS
@@ -39,6 +52,11 @@ const EFFECT_OF: Record<RoomTarget, Effect> = {
   note: 'plant',
   todo: 'checklist',
   weather: 'sky',
+}
+
+/** 빠르게 시작해 부드럽게 멈춘다. */
+function ease(value: number) {
+  return 1 - (1 - value) ** 3
 }
 
 function material(color: string, roughness = 0.6, options: THREE.MeshPhysicalMaterialParameters = {}) {
@@ -341,9 +359,11 @@ function buildGifts(island: THREE.Object3D, body: THREE.Object3D) {
   return [mug, balloon, bird, crown]
 }
 
+/** onGift는 방의 물건을 눌렀을 때, 그 물건의 순서. */
 export function createDiorama(
   container: HTMLElement,
   onTap: (target: RoomTarget) => void,
+  onGift: (index: number) => void,
 ): Diorama {
   const canvas = document.createElement('canvas')
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
@@ -418,6 +438,8 @@ export function createDiorama(
   const hearts = createBurst(heartGeometry(0.07), 24, island)
   const confetti = createBurst(new THREE.PlaneGeometry(0.1, 0.07), 80, island)
   const papers = createBurst(new THREE.PlaneGeometry(0.2, 0.26), 12, island)
+  const puffs = createBurst(new THREE.SphereGeometry(0.05, 8, 6), 12, island)
+  const giftHome = gifts.map((gift) => ({ y: gift.position.y, turn: gift.rotation.y }))
 
   /** 진행 중이면 0~1, 아니면 null. */
   function progress(effect: Effect) {
@@ -436,6 +458,14 @@ export function createDiorama(
       papers.emit({ origin: new THREE.Vector3(-1.35, 0.8, 0.8), colors: ['#fffaf0', '#fbf0dd'], count: 4, rise: 1.5, spread: 0.5, gravity: 1.2, seconds: 1.8 })
     } else if (effect === 'plant') {
       confetti.emit({ origin: new THREE.Vector3(1.42, 1, 0.9), colors: ['#f3a7a0', '#f6cf74'], count: 10, rise: 1, spread: 0.5, gravity: 1.6, seconds: 1.1 })
+    } else if (effect === 'mug') {
+      puffs.emit({ origin: new THREE.Vector3(-0.72, 0.5, 1.45), colors: ['#ffffff', '#f4efe8'], count: 6, rise: 0.5, spread: 0.08, gravity: -0.1, seconds: 1.6 })
+    } else if (effect === 'balloon') {
+      hearts.emit({ origin: new THREE.Vector3(1.85, 2.1, -0.15), colors: ['#f0a39a', '#f6b4a8'], count: 4, rise: 0.8, spread: 0.4, gravity: 0.3, seconds: 1.4 })
+    } else if (effect === 'bird') {
+      confetti.emit({ origin: new THREE.Vector3(-1.3, 1.6, -0.7), colors: ['#f6cf74', '#eebb55'], count: 8, rise: 1, spread: 0.6, gravity: 1.4, seconds: 1.2 })
+    } else if (effect === 'crown') {
+      confetti.emit({ origin: new THREE.Vector3(0, 1.9, 0.2), colors: ['#f3a7a0', '#fff3df', '#f6cf74'], count: 14, rise: 1.4, spread: 0.7, gravity: 1.2, seconds: 1.4 })
     }
   }
 
@@ -497,10 +527,19 @@ export function createDiorama(
       gift.visible = giftScales[index] > 0.01
       gift.scale.setScalar(Math.max(giftScales[index], 0.001))
     })
-    gifts[1].rotation.z = Math.sin(performance.now() / 1400) * (still ? 0 : 0.05)
+    // 누르면 물건마다 다르게 반응한다.
+    const [mug, balloon, bird, crown] = GIFT_EFFECTS.map(progress)
+    gifts[0].rotation.z = mug === null ? 0 : Math.sin(mug * Math.PI * 6) * 0.18 * (1 - mug)
+    gifts[1].position.y = giftHome[1].y + (balloon === null ? 0 : Math.sin(balloon * Math.PI) * 0.45)
+    gifts[1].rotation.z =
+      Math.sin(performance.now() / 1400) * (still ? 0 : 0.05) +
+      (balloon === null ? 0 : Math.sin(balloon * Math.PI * 4) * 0.12 * (1 - balloon))
+    gifts[2].position.y = giftHome[2].y + (bird === null ? 0 : Math.abs(Math.sin(bird * Math.PI * 3)) * 0.18 * (1 - bird))
+    gifts[2].rotation.y = giftHome[2].turn + (bird === null ? 0 : ease(bird) * Math.PI * 2)
+    gifts[3].rotation.y = giftHome[3].turn + (crown === null ? 0 : ease(crown) * Math.PI * 2)
     const pop = progress('sky')
     props.sky.scale.setScalar(pop === null ? 1 : 1 + Math.sin(pop * Math.PI * 3) * 0.22 * (1 - pop))
-    for (const burst of [hearts, confetti, papers]) burst.update(elapsed)
+    for (const burst of [hearts, confetti, papers, puffs]) burst.update(elapsed)
   }
 
   function render() {
@@ -606,7 +645,7 @@ export function createDiorama(
     pointer.y = (event.clientY / innerHeight) * 2 - 1
   }
 
-  const targets: { object: THREE.Object3D; effect: Effect | 'lamp'; target?: RoomTarget }[] = [
+  const targets: { object: THREE.Object3D; effect: Effect | 'lamp'; target?: RoomTarget; gift?: number }[] = [
     { object: assistant.root, effect: 'assistant', target: 'assistant' },
     { object: props.books, effect: 'books', target: 'diary' },
     { object: props.calendar, effect: 'calendar', target: 'event' },
@@ -614,6 +653,7 @@ export function createDiorama(
     { object: props.checklist, effect: 'checklist', target: 'todo' },
     { object: props.sky, effect: 'sky', target: 'weather' },
     { object: props.lamp, effect: 'lamp' },
+    ...gifts.map((object, gift) => ({ object, effect: GIFT_EFFECTS[gift], gift })),
   ]
   const focusable: [RoomTarget, THREE.Object3D][] = [
     ['diary', props.books],
@@ -637,6 +677,10 @@ export function createDiorama(
     const nearest = hits.sort((left, right) => left.distance - right.distance)[0]?.item
     if (!nearest) return
     if (nearest.target) onTap(nearest.target)
+    if (nearest.gift !== undefined) {
+      play(nearest.effect as Effect)
+      onGift(nearest.gift)
+    }
     if (nearest.effect === 'lamp') {
       switchLamp(!lampOn)
       render()

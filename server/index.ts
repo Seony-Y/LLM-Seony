@@ -34,6 +34,7 @@ const MAX_PLACE = 100
 const KAKAO_TIMEOUT = 8000
 /** 이만큼 가까우면 차를 탈 일이 아니다. 길찾기는 바로 앞도 한 바퀴 도는 길로 계산한다. */
 const NEARBY_METERS = 500
+const PLACE_RESULTS = 5
 
 // 한 문장으로 처리해 중간에 실패해도 일부만 저장되지 않는다.
 // 더 최근에 수정된 값만 받아들이고, seq는 저장할 때마다 늘어난다.
@@ -90,6 +91,8 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
       return new Response(null, { status: 204 })
     case 'POST /api/chat':
       return Response.json({ text: await chat(await readMessages(request), url.searchParams.has('precise'), env) })
+    case 'POST /api/places':
+      return Response.json(await places(await readJson(request), env))
     case 'POST /api/travel':
       return Response.json(await travel(await readJson(request), env))
     case 'GET /api/backups': {
@@ -164,48 +167,100 @@ async function chat(messages: Message[], precise: boolean, env: Env): Promise<st
   return text
 }
 
-/** 지금 자리에서 장소까지 차로 걸리는 시간. 키는 서버에만 둔다. */
-async function travel(body: unknown, env: Env) {
-  const { from, to } = (body ?? {}) as { from?: { latitude?: unknown; longitude?: unknown }; to?: unknown }
-  const latitude = Number(from?.latitude)
-  const longitude = Number(from?.longitude)
-  const place = typeof to === 'string' ? to.trim() : ''
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !place || place.length > MAX_PLACE) {
-    throw new HttpError(400, '길찾기 형식이 잘못됐습니다.')
-  }
-  if (!env.KAKAO_REST_KEY) throw new HttpError(503, '서버에 길찾기 키가 설정되지 않았습니다.')
-  const kakao = async <T>(url: string) => {
-    const response = await fetch(url, {
-      headers: { Authorization: `KakaoAK ${env.KAKAO_REST_KEY}` },
-      signal: AbortSignal.timeout(KAKAO_TIMEOUT),
-    }).catch(() => null)
-    if (!response?.ok) {
-      console.error('kakao', response?.status, await response?.text().catch(() => ''))
-      throw new HttpError(502, '지금은 길찾기를 하지 못합니다.')
-    }
-    return (await response.json()) as T
-  }
+interface Coords {
+  latitude: number
+  longitude: number
+}
 
-  // 같은 이름이 여럿이면 가까운 곳이 맞을 가능성이 크다.
-  const search = new URLSearchParams({ query: place, x: String(longitude), y: String(latitude), size: '1' })
-  const { documents } = await kakao<{ documents: { place_name: string; x: string; y: string }[] }>(
+function readCoords(value: unknown): Coords | null {
+  const { latitude, longitude } = (value ?? {}) as { latitude?: unknown; longitude?: unknown }
+  const coords = { latitude: Number(latitude), longitude: Number(longitude) }
+  return value && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude) ? coords : null
+}
+
+function readPlace(value: unknown) {
+  const place = typeof value === 'string' ? value.trim() : ''
+  return place.length <= MAX_PLACE ? place : ''
+}
+
+/** 카카오 API. 키는 서버에만 둔다. */
+async function kakao<T>(env: Env, url: string): Promise<T> {
+  if (!env.KAKAO_REST_KEY) throw new HttpError(503, '서버에 길찾기 키가 설정되지 않았습니다.')
+  const response = await fetch(url, {
+    headers: { Authorization: `KakaoAK ${env.KAKAO_REST_KEY}` },
+    signal: AbortSignal.timeout(KAKAO_TIMEOUT),
+  }).catch(() => null)
+  if (!response?.ok) {
+    console.error('kakao', response?.status, await response?.text().catch(() => ''))
+    throw new HttpError(502, '지금은 길찾기를 하지 못합니다.')
+  }
+  return (await response.json()) as T
+}
+
+interface KakaoPlace {
+  place_name: string
+  road_address_name: string
+  address_name: string
+  x: string
+  y: string
+}
+
+/** 장소 이름으로 찾은 후보. near가 있으면 가까운 곳이 먼저 나온다. */
+async function searchPlaces(env: Env, query: string, near: Coords | null, size: number) {
+  const search = new URLSearchParams({ query, size: String(size) })
+  if (near) {
+    search.set('x', String(near.longitude))
+    search.set('y', String(near.latitude))
+  }
+  const { documents } = await kakao<{ documents: KakaoPlace[] }>(
+    env,
     `https://dapi.kakao.com/v2/local/search/keyword.json?${search}`,
   )
-  const found = documents[0]
+  return documents.map((found) => ({
+    name: found.place_name,
+    address: found.road_address_name || found.address_name,
+    latitude: Number(found.y),
+    longitude: Number(found.x),
+  }))
+}
+
+/** 일정에 넣을 장소를 고르도록 후보를 준다. */
+async function places(body: unknown, env: Env) {
+  const { query, near } = (body ?? {}) as { query?: unknown; near?: unknown }
+  const place = readPlace(query)
+  if (!place) throw new HttpError(400, '찾을 장소가 필요합니다.')
+  return searchPlaces(env, place, readCoords(near), PLACE_RESULTS)
+}
+
+/** 지금 자리에서 장소까지 차로 걸리는 시간. 고른 장소면 at에 좌표가 있다. */
+async function travel(body: unknown, env: Env) {
+  const { from: origin, to, at } = (body ?? {}) as { from?: unknown; to?: unknown; at?: unknown }
+  const from = readCoords(origin)
+  const place = readPlace(to)
+  if (!from || !place) throw new HttpError(400, '길찾기 형식이 잘못됐습니다.')
+
+  // 이름만 있으면 같은 이름 가운데 가까운 곳이 맞을 가능성이 크다.
+  const found = readCoords(at)
+    ? { name: place, ...readCoords(at)! }
+    : (await searchPlaces(env, place, from, 1))[0]
   if (!found) throw new HttpError(404, '장소를 찾지 못했습니다.')
-  if (meters(latitude, longitude, Number(found.y), Number(found.x)) < NEARBY_METERS) {
-    return { place: found.place_name, minutes: 0 }
+  if (meters(from.latitude, from.longitude, found.latitude, found.longitude) < NEARBY_METERS) {
+    return { place: found.name, minutes: 0 }
   }
 
-  const route = new URLSearchParams({ origin: `${longitude},${latitude}`, destination: `${found.x},${found.y}` })
+  const route = new URLSearchParams({
+    origin: `${from.longitude},${from.latitude}`,
+    destination: `${found.longitude},${found.latitude}`,
+  })
   const { routes } = await kakao<{ routes: { result_code: number; summary?: { duration: number } }[] }>(
+    env,
     `https://apis-navi.kakaomobility.com/v1/directions?${route}`,
   )
   const [best] = routes
   // 104는 출발지와 도착지가 너무 가까울 때다.
-  if (best?.result_code === 104) return { place: found.place_name, minutes: 0 }
+  if (best?.result_code === 104) return { place: found.name, minutes: 0 }
   if (best?.result_code !== 0 || !best.summary) throw new HttpError(404, '길을 찾지 못했습니다.')
-  return { place: found.place_name, minutes: Math.ceil(best.summary.duration / 60) }
+  return { place: found.name, minutes: Math.ceil(best.summary.duration / 60) }
 }
 
 /** 두 좌표 사이의 직선거리. */
