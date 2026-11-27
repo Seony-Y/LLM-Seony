@@ -1,6 +1,6 @@
 import type { DayForecast, TodayWeather } from '../online/weather'
 import { relatedNotes } from '../recall/recall'
-import type { AssistantRecord, RecordData } from '../records/types'
+import type { AssistantRecord, RecordData, Tone } from '../records/types'
 
 export type Scene = 'morning' | 'rain' | 'busy' | 'night'
 
@@ -111,26 +111,31 @@ export function greeting(state: DayState): Line {
         title = nag ? `${name}, 또 딴짓했지?` : `${name}, 왔어?`
         if (now.getHours() < 11) title = nag ? '이제 일어났어?' : `${name}, 잘 잤어?`
       }
+      // 비는 위에서 따로 말하고, 여기서는 아침에 눈, 추위, 더위, 일교차를 챙긴다.
+      const tip = now.getHours() < 11 && weather ? weatherTip(now, state.events, weather, settings.tone) : null
+      const withTip = (body: string) => (tip ? `${body}\n${tip}` : body)
       if (next) {
         const time = formatTime(new Date(next.data.startsAt))
         const memory = relatedNotes(next.data.title, state.notes ?? [])[0]?.data.body
         const ending = nag ? '늦지 마요.' : '천천히 가요.'
         return {
           title,
-          body: `다음은 ${time} ${next.data.title}. ${memory ? `\n기억하죠? ${memory}` : ending}`,
+          body: memory
+            ? `다음은 ${time} ${next.data.title}. \n기억하죠? ${memory}`
+            : withTip(`다음은 ${time} ${next.data.title}. ${ending}`),
         }
       }
       if (open) {
         return {
           title,
-          body: nag
-            ? `할 일이 ${open}개 남았어요. 하나만 해요.`
-            : `남은 일정은 없고, 할 일이 ${open}개 있어요.`,
+          body: withTip(
+            nag ? `할 일이 ${open}개 남았어요. 하나만 해요.` : `남은 일정은 없고, 할 일이 ${open}개 있어요.`,
+          ),
         }
       }
       return {
         title,
-        body: nag ? '할 일이 없다고요? 수상한데요.' : '오늘은 한가해요. 떠오르는 게 있으면 맡겨요.',
+        body: withTip(nag ? '할 일이 없다고요? 수상한데요.' : '오늘은 한가해요. 떠오르는 게 있으면 맡겨요.'),
       }
     }
   }
@@ -218,7 +223,9 @@ export function diaryBody({ now, settings, events, todos }: DayState): string {
 
 export function briefing(
   day: Date,
-  { settings, events, todos }: Pick<DayState, 'settings' | 'events' | 'todos'>,
+  { settings, events, todos, weather }: Pick<DayState, 'settings' | 'events' | 'todos'> & {
+    weather?: TodayWeather | null
+  },
 ): Line {
   const [first, ...others] = eventsOn(day, events)
   const open = dueTodos(day, todos).length
@@ -228,8 +235,40 @@ export function briefing(
     parts[0] = `일정 ${others.length + 1}개, 첫 일정은 ${time} ${first.data.title}`
   }
   if (open) parts.push(`할 일 ${open}개`)
+  const tip = weather && weatherTip(day, events, weather, settings.tone)
   return {
     title: settings.tone === 'nag' ? '일어났죠?' : `${settings.userName}, 잘 잤어요?`,
-    body: parts.join(' · '),
+    body: [parts.join(' · '), tip].filter(Boolean).join('\n'),
   }
+}
+
+const COLD = -5
+const HOT = 30
+const DAILY_SWING = 10
+
+/** 그날 예보를 일정과 엮은 한마디. 챙길 것이 없으면 null. 가장 급한 것 하나만 말한다. */
+export function weatherTip(
+  day: Date,
+  events: AssistantRecord<'event'>[],
+  weather: TodayWeather,
+  tone: Tone,
+): string | null {
+  const forecast = weather.days?.find(({ date }) => date === localDate(day))
+  if (!forecast) return null
+  const { sky, low, high, rainAt } = forecast
+  const ahead = eventsOn(day, events).filter(({ data }) => new Date(data.startsAt) > day)
+  if (rainAt) {
+    const wet = ahead.find(({ data }) => new Date(data.startsAt) >= rainAt)
+    const umbrella = tone === 'nag' ? '우산 또 두고 가지 말고요.' : '우산 챙겨요.'
+    const going = wet ? ` ${formatTime(new Date(wet.data.startsAt))} ${wet.data.title} 갈 때` : ''
+    const when = rainAt <= day ? '오늘 비 소식이 있어요.' : `${formatTime(rainAt)}부터 비 온대요.`
+    return `${when}${going} ${umbrella}`
+  }
+  if (sky === 'snow') {
+    return ahead.length ? '눈 소식 있어요. 길이 미끄러우니 일찍 나서요.' : '눈 소식 있어요. 나갈 땐 미끄러운 길 조심해요.'
+  }
+  if (low <= COLD) return `${low}°까지 내려가요. ${tone === 'nag' ? '얇게 입고 나가면 혼나요.' : '단단히 입어요.'}`
+  if (high >= HOT) return `낮에 ${high}°까지 올라요. 물 자주 마셔요.`
+  if (high - low >= DAILY_SWING) return `${low}°에서 ${high}°, 일교차가 커요. 겉옷 챙겨요.`
+  return null
 }
