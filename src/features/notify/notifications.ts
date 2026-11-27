@@ -19,7 +19,7 @@ const TRAVEL_SPARE = 10 * 60_000
 /** 이보다 가까우면 출발 알림이 필요 없다. */
 const MIN_TRAVEL_MINUTES = 5
 
-type PlanState = Pick<DayState, 'now' | 'settings' | 'events' | 'todos' | 'notes'>
+type PlanState = Pick<DayState, 'now' | 'settings' | 'events' | 'todos' | 'notes'> & { weather?: DayState['weather'] }
 
 function notificationId(key: string) {
   let hash = 2166136261

@@ -202,7 +202,7 @@ function App() {
     if (loaded) void applyNotifications(state, travel).catch(console.error)
     // 시간이 흐르는 것만으로는 예약을 다시 하지 않는다.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, settings, events, todos, notes, travel])
+  }, [loaded, settings, events, todos, notes, travel, weather])
 
   useEffect(() => {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)

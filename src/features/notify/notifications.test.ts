@@ -66,6 +66,19 @@ test('지난 7시를 빼고 7일 안의 아침 보고를 그날 일정으로 만
   expect(new Set(planned.map(({ id }) => id)).size).toBe(6)
 })
 
+test('아침 보고에 그날 예보를 일정과 엮어 덧붙인다', () => {
+  const rainy = { date: '2026-11-25', sky: 'rain' as const, low: 4, high: 8, rainAt: new Date(2026, 10, 25, 9) }
+  const planned = planNotifications({
+    now,
+    settings: { ...defaultSettings, briefing: true },
+    events: [event('회의', new Date(2026, 10, 25, 10), false)],
+    todos: [],
+    weather: { sky: 'cloud', isDay: true, place: '', temperature: 5, rainAt: null, days: [rainy] },
+  })
+  expect(planned[0].body).toBe('일정 1개, 첫 일정은 오전 10:00 회의\n오전 9:00부터 비 온대요. 오전 10:00 회의 갈 때 우산 챙겨요.')
+  expect(planned[1].body).not.toContain('\n')
+})
+
 function todo(title: string, dueDate?: string, doneAt: string | null = null): AssistantRecord<'todo'> {
   return { ...event(title, now), kind: 'todo', data: { title, doneAt, dueDate } } as AssistantRecord<'todo'>
 }
