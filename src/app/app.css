@@ -306,7 +306,8 @@
 .account button,
 .settings > button,
 .trash-title button,
-.file {
+.file,
+.diary-past {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -580,9 +581,8 @@
 }
 
 .diary-past {
-  min-height: 44px;
-  color: var(--panel-soft);
-  font-size: 14px;
+  color: var(--panel-ink);
+  font-size: 15px;
 }
 
 .diary-history {
