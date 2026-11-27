@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest'
 import { defaultSettings, type AssistantRecord } from '../records/types'
-import { planNotifications, snooze, snoozed } from './notifications'
+import { planNotifications, snooze, snoozed, toQuick } from './notifications'
 
 const now = new Date(2026, 10, 24, 10, 0)
 
@@ -174,4 +174,19 @@ test('미룬 알림은 10분 뒤에 다시 울리고, 지난 것은 버린다', 
   } finally {
     vi.unstubAllGlobals()
   }
+})
+
+test('버튼이 달린 알림은 기기가 직접 띄울 수 있게 바꾼다', () => {
+  const planned = planNotifications({
+    now,
+    settings: defaultSettings,
+    events: [event('회의', new Date(2026, 10, 24, 11))],
+    todos: [todo('장보기', '2026-11-24')],
+  })
+  const quick = planned.filter(({ actionTypeId }) => actionTypeId).map(toQuick)
+  // 밀린 할 일은 다음 아침들에도 알리므로 앞의 둘만 본다.
+  expect(quick.slice(0, 2)).toEqual([
+    expect.objectContaining({ title: '회의', action: 'later', at: new Date(2026, 10, 24, 11).getTime() }),
+    expect.objectContaining({ title: '아직 남은 일 1개', action: 'done', todoId: '장보기' }),
+  ])
 })

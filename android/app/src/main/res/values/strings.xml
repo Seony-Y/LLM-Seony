@@ -7,6 +7,8 @@
     <string name="widget_empty_body">눌러서 앱을 한 번 열어주세요.</string>
     <string name="widget_prompt">대화하기</string>
     <string name="widget_voice">말로 하기</string>
+    <string name="reminder_done">끝냄</string>
+    <string name="reminder_later">10분 뒤 다시</string>
     <string name="todo_widget_label">또리 할 일</string>
     <string name="todo_widget_description">오늘 할 일을 홈 화면에서 바로 체크합니다.</string>
     <string name="todo_widget_title">오늘 할 일</string>
