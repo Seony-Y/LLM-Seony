@@ -121,19 +121,21 @@ export function Settings({ records, sync, open, updateStatus, onClose, onOnboard
           </ul>
         </div>
         {open && <Preferences settings={settings} onSaved={onClose} />}
-        <button type="button" onClick={onOnboarding}>
-          처음 안내 다시 보기
-        </button>
-        {isNative && (
-          <button type="button" onClick={() => attempt(requestWidgetPin)}>
-            홈 화면에 위젯 추가
+        <div className="settings-buttons">
+          <button type="button" onClick={onOnboarding}>
+            처음 안내 다시 보기
           </button>
-        )}
-        {!exact && (
-          <button type="button" onClick={() => attempt(openExactAlarmSetting)}>
-            알림이 늦지 않게 정확한 알람 허용
-          </button>
-        )}
+          {isNative && (
+            <button type="button" onClick={() => attempt(requestWidgetPin)}>
+              홈 화면에 위젯 추가
+            </button>
+          )}
+          {!exact && (
+            <button type="button" onClick={() => attempt(openExactAlarmSetting)}>
+              알림이 늦지 않게 정확한 알람 허용
+            </button>
+          )}
+        </div>
 
         {updateStatus === 'installNeeded' && <p role="alert">새 앱 설치가 필요해요.</p>}
         {updateStatus === 'downloaded' && (
