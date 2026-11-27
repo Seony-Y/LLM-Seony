@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import type { DayState } from '../assistant/speech'
 import { defaultSettings, type AssistantRecord } from '../records/types'
-import { buildTimeline } from './timeline'
+import { buildTimeline, todoItems } from './timeline'
 
 const now = new Date(2026, 10, 24, 10, 0)
 
@@ -65,4 +65,21 @@ test('오래 열지 않으면 낡은 일정을 보여주지 않는다', () => {
   const last = shownAt(new Date(2026, 11, 24))
   expect(last.title).toBe('오랜만이에요.')
   expect(last.events).toEqual([])
+})
+
+test('할 일 위젯은 오늘까지 할 일 다음에 오늘 끝낸 일을 보여준다', () => {
+  const todo = (title: string, dueDate?: string, doneAt: string | null = null): AssistantRecord<'todo'> =>
+    ({ ...event(title, now), kind: 'todo', data: { title, doneAt, dueDate } }) as AssistantRecord<'todo'>
+  const todos = [
+    todo('내일 일', '2026-11-25'),
+    todo('밀린 일', '2026-11-20'),
+    todo('오늘 끝낸 일', '2026-11-24', new Date(2026, 10, 24, 9).toISOString()),
+    todo('어제 끝낸 일', '2026-11-23', new Date(2026, 10, 23, 9).toISOString()),
+    todo('날짜 없는 일'),
+  ]
+  expect(todoItems(todos, now)).toEqual([
+    { id: '밀린 일', title: '밀린 일', done: false },
+    { id: '날짜 없는 일', title: '날짜 없는 일', done: false },
+    { id: '오늘 끝낸 일', title: '오늘 끝낸 일', done: true },
+  ])
 })

@@ -43,8 +43,13 @@ import { useSync } from '../features/records/useSync'
 import { Room } from '../features/room/Room'
 import type { RoomTarget } from '../features/room/diorama'
 import { useUpdate } from '../features/update/useUpdate'
-import { onWidgetPrompt, updateWidget } from '../features/widget/roomWidget'
-import { buildTimeline } from '../features/widget/timeline'
+import {
+  onWidgetPrompt,
+  takeTodoWidgetChanges,
+  updateTodoWidget,
+  updateWidget,
+} from '../features/widget/roomWidget'
+import { buildTimeline, todoItems } from '../features/widget/timeline'
 import { AddForm, type AddKind } from './AddForm'
 import type { Draft } from './ConfirmCard'
 import { Conversation, type Exchange } from './Conversation'
@@ -254,6 +259,22 @@ function App() {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
   }, [loaded, settings, events, todos, notes, weather])
 
+  // 할 일 위젯에서 체크한 것은 앱을 열 때 기록에 옮긴다.
+  useEffect(() => {
+    if (!loaded) return
+    const apply = async () => {
+      if (document.visibilityState !== 'visible') return
+      for (const [id, done] of Object.entries(await takeTodoWidgetChanges())) {
+        const todo = latestState.current.todos.find((other) => other.id === id)
+        if (todo && (todo.data.doneAt !== null) !== done) await toggleTodo(id)
+      }
+    }
+    const run = () => void apply().catch(console.error)
+    run()
+    document.addEventListener('visibilitychange', run)
+    return () => document.removeEventListener('visibilitychange', run)
+  }, [loaded])
+
   // 하루에 한 번 출석을 남긴다. 설정과 따로 두어 다른 기기에서 바꾼 설정을 덮어쓰지 않는다.
   const today = localDate(now)
   const visitedToday = records.visits.includes(today)
@@ -261,6 +282,11 @@ function App() {
     if (!loaded || visitedToday) return
     void saveRecord('visit', { date: today }, `visit-${today}`).catch(console.error)
   }, [loaded, visitedToday, today])
+
+  // 할 일 위젯의 목록. 날이 바뀌면 오늘 것으로 다시 보낸다.
+  useEffect(() => {
+    if (loaded) void updateTodoWidget(todoItems(todos, new Date())).catch(console.error)
+  }, [loaded, todos, today])
 
   useEffect(() => {
     if (!loaded || bond.level <= readSeenLevel()) return
