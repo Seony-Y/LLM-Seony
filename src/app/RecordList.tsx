@@ -44,7 +44,7 @@ export function RecordList({ view, records, now, onDone, onEdit }: RecordListPro
         )}
         {past.length > 0 && (
           <button className="diary-past" type="button" onClick={() => setReadingPast(true)}>
-            지난 일기 {past.length}편 보기
+            지난 일기 보기
           </button>
         )}
         {readingPast && <DiaryHistory diaries={past} onClose={closePast} />}
