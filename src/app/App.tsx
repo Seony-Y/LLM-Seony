@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { localAiAvailable, requestAssistant } from '../features/assistant/api/requestAssistant'
 import { requestChat } from '../features/assistant/api/requestChat'
@@ -42,33 +42,44 @@ const EXCHANGE_LIMIT = 50
 const LEVEL_UP_DELAY = 1800
 const SEEN_LEVEL_KEY = 'personal-assistant.bond-level'
 
-const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
+/** accent는 방 안 소품의 색. */
+const VIEWS: { view: View; label: string; accent: string; icon: ReactNode }[] = [
   {
     view: 'event',
     label: '일정',
+    accent: '#e08a72',
     icon: <><rect x="4" y="5" width="16" height="15" rx="4" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
   },
   {
     view: 'todo',
     label: '할 일',
+    accent: '#7fb069',
     icon: <><circle cx="12" cy="12" r="8.5" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
   },
   {
     view: 'diary',
     label: '비서 일기',
+    accent: '#6f86b8',
     icon: <path d="M6 4h11a2 2 0 012 2v14H8a3 3 0 01-3-3V5M5 17a3 3 0 013-3h11" />,
   },
   {
     view: 'note',
     label: '기억',
+    accent: '#e2a04f',
     icon: <path d="M12 20V10M12 12C7 12 5 9 5 5c5 0 7 3 7 7zM12 14c4 0 7-2 7-6-4 0-7 2-7 6z" />,
   },
   {
     view: 'talk',
     label: '대화',
+    accent: '#d98a8a',
     icon: <path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4.5 3.5V17H5a2 2 0 01-2-2V7a2 2 0 012-2z" />,
   },
 ]
+
+/** 대화는 비서가, 다른 기록은 방 안의 소품이 맡는다. */
+function roomTarget(view: View): RoomTarget {
+  return view === 'talk' ? 'assistant' : view
+}
 
 function App() {
   useViewport()
@@ -77,6 +88,7 @@ function App() {
   const now = useNow()
   const [weather, setWeather] = useState<TodayWeather | null>(null)
   const [view, changeView] = useState<View>('event')
+  const [focus, setFocus] = useState({ target: roomTarget('event'), count: 0 })
   const [prompt, setPrompt] = useState('')
   const [line, setLine] = useState<Line | null>(null)
   const [pokes, setPokes] = useState(0)
@@ -125,6 +137,7 @@ function App() {
         const parsed = parseShared(text)
         if (parsed.type === 'question') return
         changeView('talk')
+        setFocus(({ count }) => ({ target: 'assistant', count: count + 1 }))
         setRaised(true)
         addExchange({ question: text, reply: '공유받은 글이에요. 고쳐서 넣어도 돼요.', proposal: parsed })
         setLine({ title: '이거 맡길까요?', body: '아래에서 골라주세요.' })
@@ -200,6 +213,7 @@ function App() {
   function setView(next: View) {
     if (next !== view) setRaised(next === 'talk')
     changeView(next)
+    setFocus(({ count }) => ({ target: roomTarget(next), count: count + 1 }))
     setEditing(undefined)
   }
 
@@ -397,6 +411,8 @@ ${done}` : done,
     return today
   }
 
+  const picked = VIEWS.findIndex((item) => item.view === view)
+
   return (
     <main className="app">
       <section className="stage">
@@ -422,7 +438,7 @@ ${done}` : done,
           </svg>
           {needsAttention && <i className="dot" />}
         </button>
-        <Room scene={scene} sky={weather?.sky ?? 'cloud'} bondLevel={bond.level} hops={hops} cheers={cheers} onTap={tapRoom} />
+        <Room scene={scene} sky={weather?.sky ?? 'cloud'} bondLevel={bond.level} hops={hops} cheers={cheers} focus={focus} onTap={tapRoom} />
       </section>
 
       <section className={raised ? 'panel raised' : 'panel'}>
@@ -437,11 +453,13 @@ ${done}` : done,
             <path d={raised ? 'M6 4l8 6 8-6' : 'M6 10l8-6 8 6'} />
           </svg>
         </button>
-        <nav aria-label="기록">
+        <nav aria-label="기록" style={{ '--picked': picked, '--picked-accent': VIEWS[picked].accent } as CSSProperties}>
+          <i className="nav-pill" aria-hidden="true" />
           {VIEWS.map((item) => (
             <button
               key={item.view}
               type="button"
+              style={{ '--accent': item.accent } as CSSProperties}
               aria-pressed={view === item.view}
               onClick={() => setView(item.view)}
             >

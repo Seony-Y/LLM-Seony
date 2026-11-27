@@ -9,10 +9,12 @@ interface RoomProps {
   bondLevel: number
   hops: number
   cheers: number
+  /** 고른 기록. count가 바뀔 때마다 소품이 반응한다. */
+  focus: { target: RoomTarget; count: number }
   onTap: (target: RoomTarget) => void
 }
 
-export function Room({ scene, sky, bondLevel, hops, cheers, onTap }: RoomProps) {
+export function Room({ scene, sky, bondLevel, hops, cheers, focus, onTap }: RoomProps) {
   const container = useRef<HTMLDivElement>(null)
   const tapHandler = useRef(onTap)
   const [diorama, setDiorama] = useState<Diorama | null>(null)
@@ -61,6 +63,10 @@ export function Room({ scene, sky, bondLevel, hops, cheers, onTap }: RoomProps) 
   useEffect(() => {
     if (cheers) diorama?.celebrate()
   }, [diorama, cheers])
+
+  useEffect(() => {
+    diorama?.focus(focus.target, focus.count > 0)
+  }, [diorama, focus])
 
   return (
     <>
