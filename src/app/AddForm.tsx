@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { localDate } from '../features/assistant/speech'
+import { requestWeatherPermission } from '../features/online/weather'
 import { saveRecord } from '../features/records/recordStore'
 import { REPEAT_LABEL, repeatOf, seriesId } from '../features/records/repeat'
 import type { AssistantRecord, Repeat } from '../features/records/types'
@@ -24,6 +25,7 @@ export function AddForm({ kind, editing, onSaved, onCancel }: AddFormProps) {
   const [date, setDate] = useState(first.date)
   const [time, setTime] = useState(first.time)
   const [every, setEvery] = useState<Repeat['every'] | ''>(first.every)
+  const [place, setPlace] = useState(first.place)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -41,8 +43,11 @@ export function AddForm({ kind, editing, onSaved, onCancel }: AddFormProps) {
       const repeat = repeatOf(every, startsAt)
       if (kind === 'event') {
         const base = editing?.kind === 'event' ? editing.data : { note: '', remind: true }
-        const data = { ...base, title: value, startsAt: startsAt.toISOString(), repeat }
+        const where = place.trim() || undefined
+        const data = { ...base, title: value, startsAt: startsAt.toISOString(), repeat, place: where }
         await saveRecord('event', data, editing && seriesId(editing.id))
+        // 출발 알림은 지금 자리를 알아야 한다.
+        if (where) void requestWeatherPermission()
       } else if (kind === 'todo') {
         const base = editing?.kind === 'todo' ? editing.data : { doneAt: null }
         const due = repeatOf(every, new Date(`${date}T00:00`))
@@ -52,6 +57,7 @@ export function AddForm({ kind, editing, onSaved, onCancel }: AddFormProps) {
       }
       setText('')
       setEvery('')
+      setPlace('')
       setError('')
       onSaved(kind)
     } catch (cause) {
@@ -120,6 +126,18 @@ export function AddForm({ kind, editing, onSaved, onCancel }: AddFormProps) {
           {kind === 'event' && (
             <input aria-label="시간" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
           )}
+          {kind === 'event' && (
+            <input
+              className="place"
+              aria-label="장소"
+              autoComplete="off"
+              enterKeyHint="done"
+              maxLength={100}
+              placeholder="장소 (출발 알림)"
+              value={place}
+              onChange={(event) => setPlace(event.target.value)}
+            />
+          )}
         </div>
       )}
     </form>
@@ -131,6 +149,7 @@ interface Fields {
   date: string
   time: string
   every: Repeat['every'] | ''
+  place: string
 }
 
 function initial(kind: AddKind, editing?: AssistantRecord<AddKind>): Fields {
@@ -139,6 +158,7 @@ function initial(kind: AddKind, editing?: AssistantRecord<AddKind>): Fields {
     date: localDate(kind === 'event' ? nextHour() : new Date()),
     time: formatInputTime(nextHour()),
     every: '',
+    place: '',
   }
   if (!editing) return base
   if (editing.kind === 'note') return { ...base, text: editing.data.body }
@@ -147,5 +167,5 @@ function initial(kind: AddKind, editing?: AssistantRecord<AddKind>): Fields {
     return { ...base, text: editing.data.title, date: editing.data.dueDate ?? base.date, every }
   }
   const at = new Date(editing.data.startsAt)
-  return { text: editing.data.title, date: localDate(at), time: formatInputTime(at), every }
+  return { text: editing.data.title, date: localDate(at), time: formatInputTime(at), every, place: editing.data.place ?? '' }
 }

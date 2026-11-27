@@ -15,6 +15,8 @@ import {
   requestWeatherPermission,
   type TodayWeather,
 } from '../features/online/weather'
+import { findTravel } from '../features/online/travel'
+import type { Travel } from '../features/records/serverRecords'
 import { saveRecord } from '../features/records/recordStore'
 import type { AssistantRecord } from '../features/records/types'
 import { clearTalk, removeTurn, saveTurn } from '../features/records/talkStore'
@@ -91,6 +93,7 @@ function App() {
   const [focus, setFocus] = useState({ target: roomTarget('event'), count: 0 })
   const [prompt, setPrompt] = useState('')
   const [listening, setListening] = useState(false)
+  const [travel, setTravel] = useState(() => new Map<string, Travel>())
   const [line, setLine] = useState<Line | null>(null)
   const [pokes, setPokes] = useState(0)
   const [hops, setHops] = useState(0)
@@ -177,11 +180,29 @@ function App() {
     }
   }, [])
 
+  // 다시 열 때마다 지금 자리에서 길을 찾아 출발 알림을 맞춘다.
   useEffect(() => {
-    if (loaded) void applyNotifications(state).catch(console.error)
+    if (!loaded) return
+    let live = true
+    const load = () => {
+      if (document.visibilityState !== 'visible') return
+      void findTravel(sync.accessKey, events)
+        .then((found) => live && setTravel(found))
+        .catch(console.error)
+    }
+    load()
+    document.addEventListener('visibilitychange', load)
+    return () => {
+      live = false
+      document.removeEventListener('visibilitychange', load)
+    }
+  }, [loaded, events, sync.accessKey])
+
+  useEffect(() => {
+    if (loaded) void applyNotifications(state, travel).catch(console.error)
     // 시간이 흐르는 것만으로는 예약을 다시 하지 않는다.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, settings, events, todos, notes])
+  }, [loaded, settings, events, todos, notes, travel])
 
   useEffect(() => {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
@@ -359,7 +380,7 @@ ${done}` : done,
   }
 
   async function scheduleReminders() {
-    if (await requestNotificationPermission()) await applyNotifications(latestState.current)
+    if (await requestNotificationPermission()) await applyNotifications(latestState.current, travel)
   }
 
   async function confirm(value: Draft) {

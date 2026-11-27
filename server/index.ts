@@ -2,6 +2,8 @@ export interface Env {
   DB: D1Database
   BACKUPS: KVNamespace
   ACCESS_KEY: string
+  /** 카카오 개발자 REST 키. 없으면 이동 시간을 계산하지 않는다. */
+  KAKAO_REST_KEY?: string
   AI: { run(model: string, input: object): Promise<unknown> }
 }
 
@@ -28,6 +30,10 @@ const MIN_KEY_LENGTH = 32
 const TALK_DAYS = 7
 const BACKUP_DAYS = 30
 const BACKUP_PAGE = 1000
+const MAX_PLACE = 100
+const KAKAO_TIMEOUT = 8000
+/** 이만큼 가까우면 차를 탈 일이 아니다. 길찾기는 바로 앞도 한 바퀴 도는 길로 계산한다. */
+const NEARBY_METERS = 500
 
 // 한 문장으로 처리해 중간에 실패해도 일부만 저장되지 않는다.
 // 더 최근에 수정된 값만 받아들이고, seq는 저장할 때마다 늘어난다.
@@ -84,6 +90,8 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
       return new Response(null, { status: 204 })
     case 'POST /api/chat':
       return Response.json({ text: await chat(await readMessages(request), url.searchParams.has('precise'), env) })
+    case 'POST /api/travel':
+      return Response.json(await travel(await readJson(request), env))
     case 'GET /api/backups': {
       const { keys } = await env.BACKUPS.list()
       return Response.json(keys.map(({ name }) => name))
@@ -154,6 +162,59 @@ async function chat(messages: Message[], precise: boolean, env: Env): Promise<st
   const text = reply?.choices?.[0]?.message?.content?.trim()
   if (!text) throw new HttpError(502, '지금은 AI가 답하지 못합니다.')
   return text
+}
+
+/** 지금 자리에서 장소까지 차로 걸리는 시간. 키는 서버에만 둔다. */
+async function travel(body: unknown, env: Env) {
+  const { from, to } = (body ?? {}) as { from?: { latitude?: unknown; longitude?: unknown }; to?: unknown }
+  const latitude = Number(from?.latitude)
+  const longitude = Number(from?.longitude)
+  const place = typeof to === 'string' ? to.trim() : ''
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !place || place.length > MAX_PLACE) {
+    throw new HttpError(400, '길찾기 형식이 잘못됐습니다.')
+  }
+  if (!env.KAKAO_REST_KEY) throw new HttpError(503, '서버에 길찾기 키가 설정되지 않았습니다.')
+  const kakao = async <T>(url: string) => {
+    const response = await fetch(url, {
+      headers: { Authorization: `KakaoAK ${env.KAKAO_REST_KEY}` },
+      signal: AbortSignal.timeout(KAKAO_TIMEOUT),
+    }).catch(() => null)
+    if (!response?.ok) {
+      console.error('kakao', response?.status, await response?.text().catch(() => ''))
+      throw new HttpError(502, '지금은 길찾기를 하지 못합니다.')
+    }
+    return (await response.json()) as T
+  }
+
+  // 같은 이름이 여럿이면 가까운 곳이 맞을 가능성이 크다.
+  const search = new URLSearchParams({ query: place, x: String(longitude), y: String(latitude), size: '1' })
+  const { documents } = await kakao<{ documents: { place_name: string; x: string; y: string }[] }>(
+    `https://dapi.kakao.com/v2/local/search/keyword.json?${search}`,
+  )
+  const found = documents[0]
+  if (!found) throw new HttpError(404, '장소를 찾지 못했습니다.')
+  if (meters(latitude, longitude, Number(found.y), Number(found.x)) < NEARBY_METERS) {
+    return { place: found.place_name, minutes: 0 }
+  }
+
+  const route = new URLSearchParams({ origin: `${longitude},${latitude}`, destination: `${found.x},${found.y}` })
+  const { routes } = await kakao<{ routes: { result_code: number; summary?: { duration: number } }[] }>(
+    `https://apis-navi.kakaomobility.com/v1/directions?${route}`,
+  )
+  const [best] = routes
+  // 104는 출발지와 도착지가 너무 가까울 때다.
+  if (best?.result_code === 104) return { place: found.place_name, minutes: 0 }
+  if (best?.result_code !== 0 || !best.summary) throw new HttpError(404, '길을 찾지 못했습니다.')
+  return { place: found.place_name, minutes: Math.ceil(best.summary.duration / 60) }
+}
+
+/** 두 좌표 사이의 직선거리. */
+function meters(fromLatitude: number, fromLongitude: number, toLatitude: number, toLongitude: number) {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180
+  const a =
+    Math.sin(radians(toLatitude - fromLatitude) / 2) ** 2 +
+    Math.cos(radians(fromLatitude)) * Math.cos(radians(toLatitude)) * Math.sin(radians(toLongitude - fromLongitude) / 2) ** 2
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(a))
 }
 
 async function readJson(request: Request): Promise<unknown> {

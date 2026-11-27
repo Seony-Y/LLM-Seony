@@ -111,7 +111,7 @@ export async function getTodayWeather(now = new Date()): Promise<TodayWeather> {
   }
 }
 
-async function currentPosition() {
+export async function currentPosition() {
   try {
     return await Geolocation.getCurrentPosition({
       enableHighAccuracy: false,

@@ -3,6 +3,8 @@ import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/loc
 import type { AssistantRecord } from '../records/types'
 import { relatedNotes } from '../recall/recall'
 import { briefing, dueTodos, localDate, type DayState } from '../assistant/speech'
+import { TRAVEL_WINDOW } from '../online/travel'
+import type { Travel } from '../records/serverRecords'
 
 export const BRIEFING_HOUR = 7
 const BRIEFING_DAYS = 7
@@ -12,6 +14,10 @@ const TODO_TITLES = 3
 const EVENT_LIMIT = 120
 
 const MEMORY_LEAD = 30 * 60_000
+/** 걸리는 시간에 더해 챙기고 나설 여유. */
+const TRAVEL_SPARE = 10 * 60_000
+/** 이보다 가까우면 출발 알림이 필요 없다. */
+const MIN_TRAVEL_MINUTES = 5
 
 type PlanState = Pick<DayState, 'now' | 'settings' | 'events' | 'todos' | 'notes'>
 
@@ -23,8 +29,8 @@ function notificationId(key: string) {
   return hash >>> 1 || 1
 }
 
-/** 지금 기록으로 울려야 할 알림 전체. 기기에 예약된 알림은 항상 이 목록과 같아야 한다. */
-export function planNotifications(state: PlanState): LocalNotificationSchema[] {
+/** 지금 기록으로 울려야 할 알림 전체. 기기에 예약된 알림은 항상 이 목록과 같아야 한다. travel은 장소별 이동 시간. */
+export function planNotifications(state: PlanState, travel = new Map<string, Travel>()): LocalNotificationSchema[] {
   const { now, settings, events, notes = [] } = state
   const upcoming = events
     .filter((event) => event.data.remind && new Date(event.data.startsAt) > now)
@@ -46,6 +52,21 @@ export function planNotifications(state: PlanState): LocalNotificationSchema[] {
       id: notificationId(`memory:${event.id}`),
       title: `30분 뒤 ${event.data.title}`,
       body: `기억하죠? ${memories.join(' · ')}`,
+      schedule: { at, allowWhileIdle: true },
+    })
+  }
+
+  // 길 사정은 바뀌므로 곧 있을 일정만 출발 시각을 알린다.
+  for (const event of upcoming) {
+    const route = travel.get(event.data.place?.trim() ?? '')
+    const startsAt = Date.parse(event.data.startsAt)
+    if (!route || route.minutes < MIN_TRAVEL_MINUTES || startsAt > now.getTime() + TRAVEL_WINDOW) continue
+    const at = new Date(startsAt - route.minutes * 60_000 - TRAVEL_SPARE)
+    if (at <= now) continue
+    planned.push({
+      id: notificationId(`travel:${event.id}`),
+      title: `${event.data.title}, 나설 시간이에요`,
+      body: `${route.place}까지 차로 ${route.minutes}분쯤 걸려요.`,
       schedule: { at, allowWhileIdle: true },
     })
   }
@@ -110,7 +131,7 @@ export async function openExactAlarmSetting(): Promise<void> {
 
 let queue: Promise<void> = Promise.resolve()
 
-export function applyNotifications(state: PlanState): Promise<void> {
+export function applyNotifications(state: PlanState, travel?: Map<string, Travel>): Promise<void> {
   if (!Capacitor.isNativePlatform()) return queue
   const run = async () => {
     if ((await LocalNotifications.checkPermissions()).display !== 'granted') return
@@ -118,7 +139,7 @@ export function applyNotifications(state: PlanState): Promise<void> {
     if (notifications.length) {
       await LocalNotifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) })
     }
-    const planned = planNotifications(state)
+    const planned = planNotifications(state, travel)
     if (planned.length) await LocalNotifications.schedule({ notifications: planned })
   }
   queue = queue.then(run, run)

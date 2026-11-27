@@ -286,6 +286,17 @@
   flex-basis: calc(42px + 78px * var(--text-zoom, 1));
 }
 
+/* 날짜와 시간 아래 한 줄을 다 쓴다. */
+.when .place {
+  flex-basis: 100%;
+  padding: 0 16px;
+  background-image: none;
+}
+
+.when .place::placeholder {
+  color: var(--panel-soft);
+}
+
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

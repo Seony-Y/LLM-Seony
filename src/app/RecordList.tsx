@@ -101,6 +101,7 @@ export function RecordList({ view, records, now, onDone, onEdit }: RecordListPro
           const { data } = event
           const details = [
             `${formatDay(data.startsAt, now)} ${formatClock(data.startsAt)}`,
+            data.place,
             data.repeat && REPEAT_LABEL[data.repeat.every],
             !data.remind && '알림 없음',
           ]
