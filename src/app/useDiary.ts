@@ -19,7 +19,8 @@ export function useDiary(state: DayState, { loaded, diaries, talk }: Records, ac
       triedAt.current.set(date, Date.now())
       if (accessKey) {
         try {
-          const body = await requestDiary(accessKey, entry)
+          const recent = diaries.filter(({ data }) => data.date < date).map(({ data }) => data.body)
+          const body = await requestDiary(accessKey, entry, recent)
           if (body) {
             const written = { until: lastTurnAt(entry), rule: entry.body }
             await saveRecord('diary', { date, body, written }, `diary-${date}`)

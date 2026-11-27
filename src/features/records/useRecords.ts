@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { bondOf } from '../bond/bond'
 import { expireTalk } from './talkStore'
-import { importLegacySchedules, isPurged, loadRecords, subscribeRecords } from './recordStore'
+import { importLegacySchedules, isPurged, loadRecords, resetOldDiaries, subscribeRecords } from './recordStore'
 import { expandEvents } from './repeat'
 import { defaultSettings, SETTINGS_ID, type AssistantRecord, type Kind } from './types'
 
@@ -25,6 +25,7 @@ export function useRecords() {
     const unsubscribe = subscribeRecords(refresh)
     void navigator.storage?.persist?.().catch(() => false)
     void importLegacySchedules()
+      .then(resetOldDiaries)
       .then(() => expireTalk(new Date()))
       .catch(console.error)
       .then(refresh)

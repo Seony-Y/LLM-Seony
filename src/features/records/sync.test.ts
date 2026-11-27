@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, expect, test } from 'vitest'
 import { importBackup } from './backup'
 import { database } from './db'
-import { emptyTrash, loadRecords, saveRecord, setDeleted } from './recordStore'
+import { emptyTrash, loadRecords, resetOldDiaries, saveRecord, setDeleted } from './recordStore'
 import { linkServer, syncRecords, type RemoteRecords, type RemoteRow } from './sync'
 import type { AssistantRecord } from './types'
 
@@ -159,4 +159,17 @@ test('백업은 더 최근 기록만 되살리고 잘못된 파일은 거절한�
   expect(await importBackup(JSON.stringify({ version: 1, records: [old] }))).toBe(0)
   expect(await importBackup(JSON.stringify({ version: 1, records: [{ ...old, id: 'b' }] }))).toBe(1)
   await expect(importBackup('{"version":2}')).rejects.toThrow('백업 파일')
+})
+
+test('바꾸기 전에 쓴 일기만 한 번 지운다', async () => {
+  const db = await database
+  const diary = (id: string, updatedAt: string) =>
+    ({ id, kind: 'diary', data: { date: id, body: '일기' }, createdAt: updatedAt, updatedAt, deletedAt: null, dirty: 0 }) as AssistantRecord
+  await db.put('records', diary('2026-11-25', '2026-11-25T13:00:00.000Z'))
+  await db.put('records', diary('2026-11-27', '2026-11-27T13:00:00.000Z'))
+  await resetOldDiaries()
+  const [old, fresh] = await db.getAll('records')
+  expect(old).toMatchObject({ data: { purged: true }, dirty: 1 })
+  expect(old.deletedAt).not.toBeNull()
+  expect(fresh).toMatchObject({ data: { body: '일기' }, deletedAt: null })
 })

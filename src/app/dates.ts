@@ -24,3 +24,10 @@ export function nextHour() {
 export function formatInputTime(date: Date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
+
+export function formatDiaryDate(date: string) {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }).format(
+    new Date(year, month - 1, day),
+  )
+}

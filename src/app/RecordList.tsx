@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { relatedNotes } from '../features/recall/recall'
 import { DIARY_HOUR, localDate, openTodos } from '../features/assistant/speech'
 import { saveRecord, setDeleted } from '../features/records/recordStore'
@@ -8,7 +8,8 @@ import type { AssistantRecord, RecordData } from '../features/records/types'
 import type { Records } from '../features/records/useRecords'
 import type { AddKind } from './AddForm'
 import { ConfirmModal } from './ConfirmModal'
-import { formatDay, formatDue } from './dates'
+import { DiaryHistory } from './DiaryHistory'
+import { formatDay, formatDiaryDate, formatDue } from './dates'
 
 export type View = 'event' | 'todo' | 'diary' | 'note' | 'talk'
 
@@ -22,17 +23,33 @@ interface RecordListProps {
 
 export function RecordList({ view, records, now, onDone, onEdit }: RecordListProps) {
   const [removing, setRemoving] = useState<AssistantRecord<'event'> | null>(null)
+  const [readingPast, setReadingPast] = useState(false)
+  const closePast = useCallback(() => setReadingPast(false), [])
   if (records.error) return <p role="alert">{records.error}</p>
   if (!records.loaded) return null
 
   if (view === 'diary') {
-    if (!records.diaries.length) return <Empty>밤 {DIARY_HOUR - 12}시가 지나면 그날의 일기를 써둘게요.</Empty>
-    return records.diaries.slice(0, 30).map(({ id, data }) => (
-      <article className="diary" key={id}>
-        <h2>{data.date}</h2>
-        <p>{data.body}</p>
-      </article>
-    ))
+    const today = localDate(now)
+    const written = records.diaries.find(({ data }) => data.date === today)
+    const past = records.diaries.filter(({ data }) => data.date < today)
+    return (
+      <>
+        {written ? (
+          <article className="diary">
+            <h2>{formatDiaryDate(today)}</h2>
+            <p>{written.data.body}</p>
+          </article>
+        ) : (
+          <Empty>밤 {DIARY_HOUR - 12}시가 지나면 오늘의 일기를 써둘게요.</Empty>
+        )}
+        {past.length > 0 && (
+          <button className="diary-past" type="button" onClick={() => setReadingPast(true)}>
+            지난 일기 {past.length}편 보기
+          </button>
+        )}
+        {readingPast && <DiaryHistory diaries={past} onClose={closePast} />}
+      </>
+    )
   }
 
   if (view === 'todo') {

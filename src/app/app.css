@@ -545,6 +545,58 @@
   white-space: pre-line;
 }
 
+.diary-past {
+  min-height: 44px;
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.diary-history {
+  width: min(100% - 32px, 440px);
+  max-height: min(100% - 48px, 720px);
+  padding: 0;
+  border: 0;
+  border-radius: 32px;
+  color: var(--panel-soft);
+  background: linear-gradient(var(--panel), var(--panel)), var(--field);
+}
+
+.diary-history::backdrop {
+  background: #20243a73;
+}
+
+.diary-history > div {
+  padding: 16px 24px 8px;
+}
+
+.diary-history header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diary-history header button {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+.diary-history header button:disabled {
+  opacity: 0.3;
+}
+
+.diary-history .close {
+  margin: 0 -10px 0 auto;
+}
+
+.diary-history select {
+  min-height: 44px;
+  border: 0;
+  color: var(--panel-ink);
+  background: none;
+  font-size: 16px;
+}
+
 .settings-dialog {
   width: min(100% - 32px, 440px);
   max-height: min(100% - 48px, 720px);
