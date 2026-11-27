@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import { defaultSettings, type AssistantRecord } from '../records/types'
+import { tidyDiary } from './api/requestDiary'
 import { pendingDiaries } from './diary'
 import type { DayState } from './speech'
 
@@ -81,4 +82,8 @@ test('어제 대화만 나눴어도 일기를 쓴다', () => {
   const at = new Date(2026, 10, 24, 20).toISOString()
   const entries = pendingDiaries(state(new Date(2026, 10, 25, 9)), [], [{ id: 'a', at, question: '안녕', reply: '네' }])
   expect(dates(entries)).toEqual(['2026-11-24'])
+})
+
+test('일기는 한 문단으로 잇고 끊긴 마지막 문장은 버린다', () => {
+  expect(tidyDiary('- 오늘은 조용했다.\n\n창밖이 추워 보였다. 내일은')).toBe('오늘은 조용했다. 창밖이 추워 보였다.')
 })

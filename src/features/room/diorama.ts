@@ -11,6 +11,8 @@ export interface Diorama {
   setBond(level: number): void
   hop(): void
   celebrate(): void
+  /** 고른 기록에 맞는 소품을 가리킨다. animate면 소품이 한 번 반응한다. */
+  focus(target: RoomTarget, animate: boolean): void
   dispose(): void
 }
 
@@ -28,6 +30,15 @@ const SECONDS = { assistant: 0.6, books: 0.9, calendar: 1.1, plant: 0.8, checkli
 const CONFETTI = ['#e98a6c', '#f2b36f', '#8fb3bd', '#bfdc8c', '#f0a39a']
 
 type Effect = keyof typeof SECONDS
+
+const EFFECT_OF: Record<RoomTarget, Effect> = {
+  assistant: 'assistant',
+  diary: 'books',
+  event: 'calendar',
+  note: 'plant',
+  todo: 'checklist',
+  weather: 'sky',
+}
 
 function material(color: string, roughness = 0.6, options: THREE.MeshPhysicalMaterialParameters = {}) {
   return new THREE.MeshPhysicalMaterial({ color, roughness, envMapIntensity: 0.42, ...options })
@@ -397,6 +408,9 @@ export function createDiorama(
   let lampOn = false
   let blooming = false
   let flowerScale = 0
+  let focused: RoomTarget = 'assistant'
+  let gaze = 0
+  const lifts = new Map<THREE.Object3D, number>()
   let renderedAt = performance.now()
   const startedAt: Partial<Record<Effect, number>> = {}
 
@@ -413,20 +427,24 @@ export function createDiorama(
   }
 
   function play(effect: Effect) {
-    if (effect === 'plant') blooming = !blooming
-    if (still) {
-      flowerScale = blooming ? 1 : 0
-      render()
-      return
-    }
+    if (still) return
     startedAt[effect] = performance.now()
     if (effect === 'assistant') {
       hearts.emit({ origin: new THREE.Vector3(0, 1.5, 0.5), colors: ['#ee8f88', '#f6b4a8'], count: 5, rise: 1.1, spread: 0.5, gravity: 0.5, seconds: 1.4 })
     } else if (effect === 'books') {
       papers.emit({ origin: new THREE.Vector3(-1.35, 0.8, 0.8), colors: ['#fffaf0', '#fbf0dd'], count: 4, rise: 1.5, spread: 0.5, gravity: 1.2, seconds: 1.8 })
-    } else if (effect === 'plant' && blooming) {
+    } else if (effect === 'plant') {
       confetti.emit({ origin: new THREE.Vector3(1.42, 1, 0.9), colors: ['#f3a7a0', '#f6cf74'], count: 10, rise: 1, spread: 0.5, gravity: 1.6, seconds: 1.1 })
     }
+  }
+
+  function focus(next: RoomTarget, animate: boolean) {
+    focused = next
+    // 기억을 보는 동안 꽃이 핀다.
+    blooming = next === 'note'
+    if (still) flowerScale = blooming ? 1 : 0
+    if (animate) play(EFFECT_OF[next])
+    render()
   }
 
   function celebrate() {
@@ -462,6 +480,16 @@ export function createDiorama(
     flowerScale += ((blooming ? 1 : 0) - flowerScale) * Math.min(1, elapsed * 9)
     props.flower.scale.setScalar(Math.max(flowerScale, 0.001))
 
+    // 고른 소품은 조금 커져서 숨 쉬듯 움직인다.
+    const time = performance.now() / 1000
+    for (const [target, object] of focusable) {
+      const goal = target === focused ? 1 : 0
+      const last = lifts.get(object) ?? 0
+      const lift = still ? goal : last + (goal - last) * Math.min(1, elapsed * 8)
+      lifts.set(object, lift)
+      object.scale.setScalar(1 + lift * (0.06 + (still ? 0 : Math.sin(time * 3) * 0.025)))
+    }
+
     gifts.forEach((gift, index) => {
       const target = bond > index ? 1 : 0
       giftScales[index] = still ? target : giftScales[index] + (target - giftScales[index]) * Math.min(1, elapsed * 5)
@@ -491,7 +519,11 @@ export function createDiorama(
     body.scale.set(1 - breath, 1 + breath, 1 - breath)
     if (hopping) body.scale.y *= 1 + 0.1 * Math.sin(hop * Math.PI * 2)
     body.rotation.z = scene === 'night' ? 0.05 : Math.sin(time) * 0.012
-    body.rotation.y = pointer.x * 0.15
+    // 고른 소품 쪽으로 고개를 돌린다.
+    const chosen = focusable.find(([target]) => target === focused)?.[1]
+    const toward = chosen ? Math.atan2(chosen.position.x, chosen.position.z) * 0.45 : 0
+    gaze = still ? toward : gaze + (toward - gaze) * Math.min(1, elapsed * 4)
+    body.rotation.y = pointer.x * 0.15 + gaze
     arms.forEach((arm, index) => {
       arm.rotation.z = (index ? 1 : -1) * (0.5 + (hopping ? 1 : 0) + Math.sin(time * 2) * 0.05)
     })
@@ -582,6 +614,12 @@ export function createDiorama(
     { object: props.sky, effect: 'sky', target: 'weather' },
     { object: props.lamp, effect: 'lamp' },
   ]
+  const focusable: [RoomTarget, THREE.Object3D][] = [
+    ['diary', props.books],
+    ['event', props.calendar],
+    ['note', props.plant],
+    ['todo', props.checklist],
+  ]
   const raycaster = new THREE.Raycaster()
 
   function tap(event: MouseEvent) {
@@ -601,8 +639,8 @@ export function createDiorama(
     if (nearest.effect === 'lamp') {
       switchLamp(!lampOn)
       render()
-    } else if (nearest.effect !== 'assistant') {
-      // 비서의 반응은 화면이 hop()으로 부른다.
+    } else if (nearest.effect === 'sky') {
+      // 비서와 기록 소품의 반응은 화면이 hop()과 focus()로 부른다.
       play(nearest.effect)
     }
   }
@@ -623,6 +661,7 @@ export function createDiorama(
     },
     hop: () => play('assistant'),
     celebrate,
+    focus,
     dispose() {
       renderer.setAnimationLoop(null)
       observer.disconnect()

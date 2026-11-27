@@ -327,12 +327,29 @@
 }
 
 .panel nav {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
 }
 
+/* 고른 칸 뒤로 미끄러져 가는 바탕. 색은 방 안 소품을 따른다. */
+.nav-pill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc((100% - 16px) / 5);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--picked-accent) 16%, var(--field));
+  box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--picked-accent) 30%, var(--edge));
+  transform: translateX(calc(var(--picked) * (100% + 4px)));
+  transition:
+    transform 0.4s cubic-bezier(0.3, 1.35, 0.5, 1),
+    background-color 0.3s,
+    box-shadow 0.3s;
+}
+
 .panel nav button {
+  position: relative;
   display: grid;
   gap: 6px;
   justify-items: center;
@@ -341,12 +358,29 @@
   color: var(--panel-soft);
   font-size: 13px;
   line-height: 1.2;
+  transition: color 0.3s;
 }
 
 .panel nav button[aria-pressed='true'] {
-  color: var(--action);
-  background: var(--field);
-  box-shadow: inset 0 -4px 0 var(--edge);
+  color: color-mix(in srgb, var(--accent) 65%, var(--panel-ink));
+  font-weight: 700;
+}
+
+.panel nav button[aria-pressed='true'] svg {
+  stroke-width: 2.2;
+  animation: nav-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes nav-pop {
+  0% {
+    transform: scale(0.7) rotate(-8deg);
+  }
+  60% {
+    transform: scale(1.18) rotate(4deg);
+  }
+  100% {
+    transform: none;
+  }
 }
 
 .panel li {
@@ -543,6 +577,58 @@
   background: repeating-linear-gradient(transparent 0 calc(var(--row) - 2px), var(--line) 0 var(--row));
   font: 20px/36px var(--hand);
   white-space: pre-line;
+}
+
+.diary-past {
+  min-height: 44px;
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.diary-history {
+  width: min(100% - 32px, 440px);
+  max-height: min(100% - 48px, 720px);
+  padding: 0;
+  border: 0;
+  border-radius: 32px;
+  color: var(--panel-soft);
+  background: linear-gradient(var(--panel), var(--panel)), var(--field);
+}
+
+.diary-history::backdrop {
+  background: #20243a73;
+}
+
+.diary-history > div {
+  padding: 16px 24px 8px;
+}
+
+.diary-history header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diary-history header button {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+.diary-history header button:disabled {
+  opacity: 0.3;
+}
+
+.diary-history .close {
+  margin: 0 -10px 0 auto;
+}
+
+.diary-history select {
+  min-height: 44px;
+  border: 0;
+  color: var(--panel-ink);
+  background: none;
+  font-size: 16px;
 }
 
 .settings-dialog {
@@ -899,7 +985,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .panel {
+  .panel,
+  .nav-pill {
     transition: none;
+  }
+
+  .panel nav button[aria-pressed='true'] svg {
+    animation: none;
   }
 }

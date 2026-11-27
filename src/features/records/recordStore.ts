@@ -122,3 +122,26 @@ export async function importLegacySchedules(): Promise<void> {
   await transaction.done
   notifyRecords()
 }
+
+/** 일기 쓰는 방식을 바꾸기 전에 쓴 일기. 다시 쓰도록 한 번만 지운다. */
+const DIARY_RESET_BEFORE = '2026-11-27T03:00:00.000Z'
+
+export async function resetOldDiaries(): Promise<void> {
+  const transaction = (await database).transaction(['records', 'meta'], 'readwrite')
+  if (await transaction.objectStore('meta').get('diaryReset')) return
+  const store = transaction.objectStore('records')
+  for (const record of await store.getAll()) {
+    if (record.kind !== 'diary' || isPurged(record) || record.updatedAt >= DIARY_RESET_BEFORE) continue
+    const updatedAt = nextTimestamp(record.updatedAt)
+    await store.put({
+      ...record,
+      data: { purged: true },
+      updatedAt,
+      deletedAt: record.deletedAt ?? updatedAt,
+      dirty: 1,
+    } as unknown as AssistantRecord)
+  }
+  await transaction.objectStore('meta').put(1, 'diaryReset')
+  await transaction.done
+  notifyRecords()
+}
