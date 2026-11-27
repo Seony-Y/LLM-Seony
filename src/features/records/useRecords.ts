@@ -25,7 +25,7 @@ export function useRecords() {
     const unsubscribe = subscribeRecords(refresh)
     void navigator.storage?.persist?.().catch(() => false)
     void importLegacySchedules()
-      .then(resetOldDiaries)
+      .then(() => resetOldDiaries())
       .then(() => expireTalk(new Date()))
       .catch(console.error)
       .then(refresh)
@@ -64,6 +64,8 @@ export function useRecords() {
           record.kind !== 'talk' && record.deletedAt && Date.parse(record.deletedAt) > oldest && !isPurged(record),
       ),
       bond: bondOf(all),
+      /** 출석한 날, YYYY-MM-DD. */
+      visits: ofKind('visit').map(({ data }) => data.date),
       pending: all.filter(({ dirty }) => dirty).length,
     }
   }, [records, loadedAt, error])

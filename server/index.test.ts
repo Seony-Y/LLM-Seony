@@ -230,3 +230,9 @@ test('장소 후보를 주고, 고른 좌표가 있으면 다시 찾지 않고 �
     vi.unstubAllGlobals()
   }
 })
+
+test('출석 기록을 받는다', async () => {
+  const visit = { ...row('visit-2026-11-27', 'x', '2026-11-27T01:00:00Z'), kind: 'visit', data: { date: '2026-11-27' } }
+  expect((await push(visit)).status).toBe(204)
+  expect((await pull())[0]).toMatchObject({ id: 'visit-2026-11-27', data: { date: '2026-11-27' } })
+})

@@ -34,9 +34,9 @@ export function PlaceField({ accessKey, value, at, onChange }: PlaceFieldProps) 
     }
   }, [accessKey, at, query, near])
 
-  /** 출발 알림은 지금 자리를 알아야 하므로 장소를 쓰려 할 때 묻는다. */
+  /** 출발 알림은 지금 자리를 알아야 하므로 장소를 쓰려 할 때 묻는다. 길찾기는 서버가 하므로 연결됐을 때만. */
   async function askLocation() {
-    if (allowed !== null) return
+    if (allowed !== null || !accessKey) return
     await requestWeatherPermission()
     const granted = await hasWeatherPermission()
     setAllowed(granted)
@@ -81,6 +81,7 @@ export function PlaceField({ accessKey, value, at, onChange }: PlaceFieldProps) 
         onFocus={() => void askLocation()}
         onChange={(event) => onChange(event.target.value)}
       />
+      {!accessKey && query && <small className="place-hint">서버에 연결하면 출발 알림을 받을 수 있어요.</small>}
       {allowed === false && <small className="place-hint">위치 권한을 켜야 출발 알림을 받을 수 있어요.</small>}
       {allowed !== false && query && !at && accessKey && (
         <small className="place-hint">목록에서 고르면 더 정확해요.</small>

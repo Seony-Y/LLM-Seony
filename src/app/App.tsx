@@ -28,7 +28,7 @@ import { findTravel } from '../features/online/travel'
 import { GIFTS, shownGifts } from '../features/bond/bond'
 import type { Travel } from '../features/records/serverRecords'
 import { saveRecord } from '../features/records/recordStore'
-import { SETTINGS_ID, type AssistantRecord } from '../features/records/types'
+import type { AssistantRecord } from '../features/records/types'
 import { clearTalk, removeTurn, saveTurn } from '../features/records/talkStore'
 import { serverConfigured } from '../features/records/serverRecords'
 import { useRecords } from '../features/records/useRecords'
@@ -221,14 +221,13 @@ function App() {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
   }, [loaded, settings, events, todos, notes, weather])
 
-  // 하루에 한 번 출석을 남긴다. 날이 바뀐 채로 켜 두어도 다음 날 것이 남는다.
+  // 하루에 한 번 출석을 남긴다. 설정과 따로 두어 다른 기기에서 바꾼 설정을 덮어쓰지 않는다.
   const today = localDate(now)
+  const visitedToday = records.visits.includes(today)
   useEffect(() => {
-    if (!loaded || settings.visits?.includes(today)) return
-    void saveRecord('setting', { ...settings, visits: [...(settings.visits ?? []), today] }, SETTINGS_ID).catch(
-      console.error,
-    )
-  }, [loaded, settings, today])
+    if (!loaded || visitedToday) return
+    void saveRecord('visit', { date: today }, `visit-${today}`).catch(console.error)
+  }, [loaded, visitedToday, today])
 
   useEffect(() => {
     if (!loaded || bond.level <= readSeenLevel()) return
@@ -259,6 +258,7 @@ function App() {
     changeView(next)
     setFocus(({ count }) => ({ target: roomTarget(next), count: count + 1 }))
     setEditing(undefined)
+    setAddDay(undefined)
   }
 
   /** 말한 것을 입력칸에 넣는다. 잘못 들었을 수 있어 보내기는 직접 누른다. */

@@ -58,3 +58,18 @@ test('하루 한 번 출석하면 1점이 쌓이고, 그날 한도 안에서 센
   expect(bondOf([settings]).points).toBe(2)
   expect(bondOf([settings, ...Array.from({ length: 20 }, () => todo(1))]).points).toBe(13)
 })
+
+test('출석은 날짜마다 한 번만 세고, 예전 설정에 남긴 출석도 함께 센다', () => {
+  const visit = (date: string) =>
+    ({ id: `visit-${date}`, kind: 'visit', data: { date }, createdAt: `${date}T01:00:00.000Z`, updatedAt: `${date}T01:00:00.000Z`, deletedAt: null, dirty: 0 }) as AssistantRecord<'visit'>
+  const legacy = {
+    id: 'settings',
+    kind: 'setting',
+    data: { assistantName: '또리', userName: '대장', tone: 'warm', briefing: false, todoReminder: true, visits: ['2026-11-01'] },
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+    deletedAt: null,
+    dirty: 0,
+  } as AssistantRecord<'setting'>
+  expect(bondOf([legacy, visit('2026-11-01'), visit('2026-11-02'), visit('2026-11-02')])).toMatchObject({ points: 2, visits: 2 })
+})
