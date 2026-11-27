@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import {
   LocalNotifications,
   type ActionPerformed,
@@ -24,6 +24,20 @@ const SNOOZE = 10 * 60_000
 const SNOOZE_KEY = 'personal-assistant.snoozes'
 /** 알림 버튼 묶음. 할 일은 하나일 때만 끝낼 수 있다. */
 const ACTION_TYPES = { todo: 'todo-one', later: 'later' } as const
+
+interface QuickReminder {
+  id: number
+  at: number
+  title: string
+  body: string
+  action: 'done' | 'later'
+  todoId?: string
+}
+
+/** 앱을 열지 않고 버튼을 처리하도록 기기가 직접 띄우는 알림. 새 앱에만 있다. */
+const quickReminders = registerPlugin<{ schedule(options: { items: QuickReminder[] }): Promise<void> }>(
+  'QuickReminders',
+)
 /** 걸리는 시간에 더해 챙기고 나설 여유. */
 const TRAVEL_SPARE = 10 * 60_000
 /** 이보다 가까우면 출발 알림이 필요 없다. */
@@ -173,14 +187,33 @@ export function applyNotifications(state: PlanState, travel?: Map<string, Travel
     if (notifications.length) {
       await LocalNotifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) })
     }
-    const planned = [...planNotifications(state, travel), ...snoozed(state.now)]
-    if (planned.length) await LocalNotifications.schedule({ notifications: planned })
+    const planned = planNotifications(state, travel)
+    if (!Capacitor.isPluginAvailable('QuickReminders')) {
+      // 예전 앱은 버튼을 누르면 앱이 열려 처리한다.
+      const all = [...planned, ...snoozed(state.now)]
+      if (all.length) await LocalNotifications.schedule({ notifications: all })
+      return
+    }
+    const plain = planned.filter(({ actionTypeId }) => !actionTypeId)
+    if (plain.length) await LocalNotifications.schedule({ notifications: plain })
+    await quickReminders.schedule({ items: planned.filter(({ actionTypeId }) => actionTypeId).map(toQuick) })
   }
   queue = queue.then(run, run)
   return queue
 }
 
-/** 미뤄둔 알림. 예약을 새로 할 때 지워지지 않도록 기기에 둔다. */
+export function toQuick({ id, title, body, schedule, actionTypeId, extra }: LocalNotificationSchema): QuickReminder {
+  return {
+    id,
+    at: schedule?.at?.getTime() ?? 0,
+    title,
+    body,
+    action: actionTypeId === ACTION_TYPES.todo ? 'done' : 'later',
+    todoId: (extra as { todoId?: string } | undefined)?.todoId,
+  }
+}
+
+/** 미뤄둔 알림. 예약을 새로 할 때 지워지지 않도록 기기에 둔다. 예전 앱에서만 쓴다. */
 interface Snooze {
   id: number
   at: number

@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
 		registerPlugin(LocalLlmPlugin.class);
 		registerPlugin(DeviceActionsPlugin.class);
 		registerPlugin(RoomWidgetPlugin.class);
+		registerPlugin(QuickRemindersPlugin.class);
 		File bundle = BundleStore.INSTANCE.launch(this);
 		if (bundle != null) {
 			bridgeBuilder.setServerPath(new ServerPath(ServerPath.PathType.BASE_PATH, bundle.getAbsolutePath()));

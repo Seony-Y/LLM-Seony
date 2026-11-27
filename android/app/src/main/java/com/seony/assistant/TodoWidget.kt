@@ -49,6 +49,9 @@ class TodoWidget : AppWidgetProvider() {
             return changes
         }
 
+        /** 알림의 "끝냄". 위젯에서 체크한 것과 같이 앱이 열릴 때 넘긴다. */
+        fun markDone(context: Context, id: String) = check(context, id, true)
+
         private fun check(context: Context, id: String, done: Boolean) {
             val saved = preferences(context)
             val todos = readArray(saved.getString(KEY_TODOS, null))
