@@ -17,6 +17,7 @@
 - 다른 앱에서 공유한 글을 일정이나 기억으로 받기 (Android)
 - 묻는 말에 일정, 할 일, 기억에서 찾아 답하기
 - 일정과 관련된 기억을 30분 전에 미리 알리기 (Android)
+- 장소가 있는 일정은 지금 자리에서 차로 걸리는 시간을 보고 나설 시간 알리기 (Android, 서버와 위치 권한 필요)
 - 또리와 대화 (서버 연결 시 Cloudflare Workers AI. 일정·할 일·기억과 지난 대화를 함께 보냄. 대화는 7일 뒤 지움)
 - 대화에 나온 약속과 할 일을 AI가 카드로 제안 (저장은 사용자가 직접 누름)
 - 그날 대화를 담아 쓰는 비서 일기 (연결이 안 되면 정해진 글)
@@ -43,7 +44,10 @@ npx wrangler login
 npm run server:deploy                            # D1과 KV를 만들고 배포
 npx wrangler d1 migrations apply DB --remote
 npx wrangler secret put ACCESS_KEY               # 32자 이상의 무작위 값
+npx wrangler secret put KAKAO_REST_KEY           # 출발 알림을 쓸 때만. 카카오 개발자 앱의 REST API 키
 ```
+
+출발 알림은 카카오 로컬(장소 검색)과 카카오모빌리티(자동차 길찾기)를 씁니다. 카카오 개발자 콘솔에서 앱을 만들고 두 API를 켠 뒤 REST API 키를 넣습니다. 키가 없으면 출발 알림만 빠집니다.
 
 배포 주소를 `.env`의 `VITE_SERVER_URL`에 넣고 폰 앱을 다시 빌드합니다. 비밀 키는 `.env`에 넣지 않고 폰과 웹의 "설정과 저장"에서 한 번씩 입력합니다. 키를 바꿀 때는 마지막 명령을 다시 실행합니다.
 

@@ -13,10 +13,11 @@ export interface Repeat {
 }
 
 export interface RecordData {
-  /** skip은 반복에서 건너뛸 날. */
+  /** skip은 반복에서 건너뛸 날. place는 출발 알림에 쓰는 장소 이름. */
   event: {
     title: string
     note: string
+    place?: string
     startsAt: string
     remind: boolean
     repeat?: Repeat

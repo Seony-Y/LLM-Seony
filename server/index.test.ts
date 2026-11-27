@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest'
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 import { getPlatformProxy } from 'wrangler'
 import worker, { type Env } from './index'
 
@@ -169,4 +169,31 @@ test('대화는 고친 이력을 남기지 않고 7일 뒤에 지운다', async 
   await run(18)
   expect((await pull())[0].data).toEqual({ purged: true })
   expect(await history()).toBe(0)
+})
+
+test('이동 시간은 카카오에서 장소를 찾고 차로 걸리는 분을 준다', async () => {
+  const asked: string[] = []
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+    asked.push(`${new Headers(init.headers).get('Authorization')} ${url}`)
+    if (url.includes('dapi.kakao.com')) {
+      return Response.json({ documents: [{ place_name: '강남역 2호선', x: '127.02', y: '37.49' }] })
+    }
+    return Response.json({ routes: [{ result_code: 0, summary: { duration: 1830 } }] })
+  })
+  const send = (body: unknown, current: Env = { ...env, KAKAO_REST_KEY: 'kakao' }) =>
+    call('travel', { method: 'POST', body: JSON.stringify(body) }, KEY, current)
+  const from = { latitude: 37.5, longitude: 127 }
+  try {
+    expect(await (await send({ from, to: '강남역' })).json()).toEqual({ place: '강남역 2호선', minutes: 31 })
+    expect(asked[0]).toMatch(/^KakaoAK kakao .*query=%EA%B0%95%EB%82%A8%EC%97%AD/)
+    expect(asked[1]).toContain('destination=127.02%2C37.49')
+    // 바로 앞이면 길을 찾지 않는다.
+    const nearby = await send({ from: { latitude: 37.4905, longitude: 127.0205 }, to: '강남역' })
+    expect(await nearby.json()).toEqual({ place: '강남역 2호선', minutes: 0 })
+    expect(asked).toHaveLength(3)
+    expect((await send({ from, to: '' })).status).toBe(400)
+    expect((await send({ from, to: '강남역' }, env)).status).toBe(503)
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })

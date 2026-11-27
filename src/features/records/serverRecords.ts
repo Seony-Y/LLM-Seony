@@ -69,6 +69,20 @@ export function serverRecords(accessKey: string): RemoteRecords {
   }
 }
 
+export interface Travel {
+  /** 카카오에서 찾은 장소 이름. */
+  place: string
+  minutes: number
+}
+
+export async function postTravel(
+  accessKey: string,
+  from: { latitude: number; longitude: number },
+  to: string,
+): Promise<Travel> {
+  return readJson<Travel>(await call(accessKey, 'travel', { from, to }))
+}
+
 /** precise는 매번 같은 답이 필요할 때. */
 export async function postChat(
   accessKey: string,

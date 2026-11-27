@@ -98,3 +98,24 @@ test('끝낸 일, 날짜 없는 일, 알림을 끈 때는 울리지 않는다', 
   expect(todoPlan([todo('끝', '2026-11-30', now.toISOString()), todo('언젠가')])).toEqual([])
   expect(todoPlan([todo('보고서', '2026-11-30')], now, false)).toEqual([])
 })
+
+test('장소가 있는 곧 있을 일정은 걸리는 시간과 여유만큼 먼저 나서라고 알린다', () => {
+  const at = (hour: number, place?: string) => {
+    const record = event(`${place ?? '집'} ${hour}시`, new Date(2026, 10, 24, hour))
+    return { ...record, data: { ...record.data, place } }
+  }
+  const tomorrow = at(12, '강남역')
+  tomorrow.data.startsAt = new Date(2026, 10, 25, 12).toISOString()
+  // 이미 늦은 곳, 너무 가까운 곳, 길을 모르는 곳, 내일 일정은 알리지 않는다.
+  const events = [at(12, '강남역'), at(13, '회사'), at(14), at(11, '먼 곳'), at(12, '옆집'), tomorrow]
+  const travel = new Map([
+    ['강남역', { place: '강남역 2호선', minutes: 40 }],
+    ['먼 곳', { place: '먼 곳', minutes: 90 }],
+    ['옆집', { place: '옆집', minutes: 2 }],
+  ])
+  const planned = planNotifications({ now, settings: defaultSettings, events, todos: [] }, travel)
+  const leaving = planned.filter(({ title }) => title.endsWith('나설 시간이에요'))
+  expect(leaving.map(({ title, body, schedule }) => [title, body, schedule?.at])).toEqual([
+    ['강남역 12시, 나설 시간이에요', '강남역 2호선까지 차로 40분쯤 걸려요.', new Date(2026, 10, 24, 11, 10)],
+  ])
+})
