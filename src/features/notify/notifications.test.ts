@@ -132,3 +132,21 @@ test('장소가 있는 곧 있을 일정은 걸리는 시간과 여유만큼 먼
     ['강남역 12시, 나설 시간이에요', '강남역 2호선까지 차로 40분쯤 걸려요.', new Date(2026, 10, 24, 11, 10)],
   ])
 })
+
+test('생일 같은 날은 사흘 전과 그날 아침 9시에 알린다', () => {
+  const at = now.toISOString()
+  const notes = ['민수 생일 11월 26일', '지수 생일 11월 24일', '메모 11월 25일'].map(
+    (body): AssistantRecord<'note'> => ({ id: body, kind: 'note', data: { body }, createdAt: at, updatedAt: at, deletedAt: null, dirty: 0 }),
+  )
+  const planned = planNotifications({ now, settings: defaultSettings, events: [], todos: [], notes })
+  // 지금은 24일 10시라 민수 생일 사흘 전과 오늘인 지수 생일 9시 알림은 지났다. 생일이 아닌 메모는 알리지 않는다.
+  expect(planned.map(({ title, body, schedule }) => [title, body, schedule?.at])).toEqual([
+    ['오늘, 챙길 날이에요', '민수 생일 11월 26일', new Date(2026, 10, 26, 9)],
+  ])
+  const later = planNotifications({ now: new Date(2026, 10, 25), settings: defaultSettings, events: [], todos: [], notes })
+  // 지난 생일은 내년 것을 맞춘다.
+  expect(later.filter(({ body }) => body.startsWith('지수')).map(({ schedule }) => schedule?.at)).toEqual([
+    new Date(2027, 10, 21, 9),
+    new Date(2027, 10, 24, 9),
+  ])
+})

@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react'
+import { anniversaries } from '../features/recall/anniversary'
 import { relatedNotes } from '../features/recall/recall'
 import { DIARY_HOUR, localDate, openTodos } from '../features/assistant/speech'
 import { saveRecord, setDeleted } from '../features/records/recordStore'
@@ -75,13 +76,19 @@ export function RecordList({ view, records, now, onDone, onEdit }: RecordListPro
 
   if (view === 'note') {
     if (!records.notes.length) return <Empty>아직 기억해 둔 게 없어요. 아래에서 추가해 보세요.</Empty>
+    const coming = new Map(anniversaries(records.notes, now).map(({ note, days }) => [note.id, days]))
     return (
       <ul>
         {records.notes.map((note) => (
           <Row
             key={note.id}
             title={note.data.body}
-            detail={`${formatDay(note.createdAt, now)} 알려줌`}
+            detail={[
+              `${formatDay(note.createdAt, now)} 알려줌`,
+              coming.has(note.id) && (coming.get(note.id) ? `${coming.get(note.id)}일 남음` : '오늘이에요'),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             onEdit={() => onEdit(note)}
             onRemove={() => void setDeleted(note.id, true)}
           />
