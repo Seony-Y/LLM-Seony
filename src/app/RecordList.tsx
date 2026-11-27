@@ -350,21 +350,26 @@ function Row({ title, detail, memories, done, children, swipe, onEdit, onRemove 
   )
   if (!swipe) return <li className={done ? 'done' : undefined}>{content}</li>
 
-  const reach = Math.min(1, Math.abs(offset) / SWIPE_DISTANCE)
+  // 놓으면 실행되는 거리를 넘으면 안내가 진해진다.
+  const armed = Math.abs(offset) >= SWIPE_DISTANCE
+  const hint = (side: 'right' | 'left', action: SwipeAction) => (
+    <span
+      className={['swipe-hint', side, armed && 'armed'].filter(Boolean).join(' ')}
+      aria-hidden="true"
+      style={{ opacity: (side === 'right' ? offset > 0 : offset < 0) ? Math.min(1, Math.abs(offset) / 30) : 0 }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path d={side === 'right' ? 'M5 12.5l4.5 4.5L19 7.5' : 'M5 12h13M13 6l6 6-6 6'} />
+      </svg>
+      {action.label}
+    </span>
+  )
   return (
     <li className={['swipeable', done && 'done'].filter(Boolean).join(' ')}>
-      {swipe.right && (
-        <span className="swipe-hint right" aria-hidden="true" style={{ opacity: offset > 0 ? reach : 0 }}>
-          {swipe.right.label}
-        </span>
-      )}
-      {swipe.left && (
-        <span className="swipe-hint left" aria-hidden="true" style={{ opacity: offset < 0 ? reach : 0 }}>
-          {swipe.left.label}
-        </span>
-      )}
+      {swipe.right && hint('right', swipe.right)}
+      {swipe.left && hint('left', swipe.left)}
       <div
-        className={sliding ? 'swipe-track sliding' : 'swipe-track'}
+        className={['swipe-track', sliding && 'sliding', offset !== 0 && 'moved'].filter(Boolean).join(' ')}
         style={{ transform: offset ? `translateX(${offset}px)` : undefined }}
         onPointerDown={(event) => {
           if (event.pointerType === 'mouse' && event.button !== 0) return

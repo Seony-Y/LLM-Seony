@@ -387,6 +387,7 @@
 .actions button,
 .account button,
 .settings > button,
+.settings-buttons button,
 .trash-title button,
 .file,
 .diary-past {
@@ -553,24 +554,45 @@
   user-select: none;
 }
 
-.swipe-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 18px;
-  color: #fff;
-  font-size: 15px;
+/* 미는 동안 줄이 카드처럼 떠 보이게 한다. */
+.swipe-track.moved {
+  border-radius: 16px;
+  box-shadow: 0 4px 14px -6px #20243a40;
 }
 
-.swipe-hint.right {
-  justify-content: flex-start;
-  background: #7fb069;
+.swipe-hint {
+  --hint: #7fb069;
+
+  position: absolute;
+  inset: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-radius: 16px;
+  color: var(--hint);
+  font-size: 15px;
+  background: color-mix(in srgb, var(--hint) 16%, transparent);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.swipe-hint svg {
+  stroke-width: 2.4;
 }
 
 .swipe-hint.left {
-  justify-content: flex-end;
-  background: #6f86b8;
+  --hint: #6f86b8;
+
+  /* 뒤집은 줄에서 flex-start가 오른쪽 끝이다. */
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.swipe-hint.armed {
+  color: #fff;
+  background: var(--hint);
 }
 
 .due {
@@ -1285,6 +1307,7 @@
 }
 
 .settings > button,
+.settings > .settings-buttons,
 .settings > .trash-title,
 .settings > .actions,
 .settings > .account,
@@ -1292,6 +1315,12 @@
 .settings > p,
 .settings > h2 {
   margin-top: 12px;
+}
+
+.settings-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .trash-title {
