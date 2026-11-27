@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { localAiAvailable, requestAssistant } from '../features/assistant/api/requestAssistant'
 import { requestChat } from '../features/assistant/api/requestChat'
@@ -153,7 +153,7 @@ function App() {
     latestState.current = state
   }, [state])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.scene = scene
   }, [scene])
 

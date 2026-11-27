@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 
 /** 이보다 낮으면(키보드가 올라온 때 등) 방을 접고 글을 쓸 자리를 남긴다. */
 const COMPACT_HEIGHT = 560
@@ -18,7 +18,7 @@ function textZoom() {
 
 /** 키보드를 뺀 실제 보이는 높이에 화면을 맞춘다. */
 export function useViewport() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const viewport = window.visualViewport
     const root = document.documentElement
     const fit = () => {
