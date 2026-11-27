@@ -8,7 +8,8 @@ export type RoomTarget = 'assistant' | 'diary' | 'event' | 'note' | 'todo' | 'we
 export interface Diorama {
   setScene(scene: Scene): void
   setSky(sky: Sky): void
-  setBond(level: number): void
+  /** 물건마다 방에 보일지. */
+  setGifts(shown: boolean[]): void
   hop(): void
   celebrate(): void
   /** 고른 기록에 맞는 소품을 가리킨다. animate면 소품이 한 번 반응한다. */
@@ -363,7 +364,7 @@ export function createDiorama(
   const props = buildProps(island)
   const gifts = buildGifts(island, assistant.body)
   const giftScales = gifts.map(() => 0)
-  let bond = 0
+  let shown: boolean[] = []
 
   const drops = Array.from({ length: RAIN_COUNT }, () => [
     Math.random() * 5 - 2.5,
@@ -491,7 +492,7 @@ export function createDiorama(
     }
 
     gifts.forEach((gift, index) => {
-      const target = bond > index ? 1 : 0
+      const target = shown[index] ? 1 : 0
       giftScales[index] = still ? target : giftScales[index] + (target - giftScales[index]) * Math.min(1, elapsed * 5)
       gift.visible = giftScales[index] > 0.01
       gift.scale.setScalar(Math.max(giftScales[index], 0.001))
@@ -655,8 +656,8 @@ export function createDiorama(
   return {
     setScene,
     setSky,
-    setBond(level) {
-      bond = level
+    setGifts(next) {
+      shown = next
       render()
     },
     hop: () => play('assistant'),

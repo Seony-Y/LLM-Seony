@@ -6,7 +6,8 @@ import type { Diorama, RoomTarget } from './diorama'
 interface RoomProps {
   scene: Scene
   sky: Sky
-  bondLevel: number
+  /** 물건마다 방에 보일지. */
+  gifts: boolean[]
   hops: number
   cheers: number
   /** 고른 기록. count가 바뀔 때마다 소품이 반응한다. */
@@ -14,7 +15,7 @@ interface RoomProps {
   onTap: (target: RoomTarget) => void
 }
 
-export function Room({ scene, sky, bondLevel, hops, cheers, focus, onTap }: RoomProps) {
+export function Room({ scene, sky, gifts, hops, cheers, focus, onTap }: RoomProps) {
   const container = useRef<HTMLDivElement>(null)
   const tapHandler = useRef(onTap)
   const [diorama, setDiorama] = useState<Diorama | null>(null)
@@ -53,8 +54,8 @@ export function Room({ scene, sky, bondLevel, hops, cheers, focus, onTap }: Room
   }, [diorama, sky])
 
   useEffect(() => {
-    diorama?.setBond(bondLevel)
-  }, [diorama, bondLevel])
+    diorama?.setGifts(gifts)
+  }, [diorama, gifts])
 
   useEffect(() => {
     if (hops) diorama?.hop()

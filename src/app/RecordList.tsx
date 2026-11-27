@@ -21,15 +21,16 @@ interface RecordListProps {
   now: Date
   onDone: (title: string) => void
   onEdit: (record: AssistantRecord<AddKind>) => void
-  /** 일정을 달력으로 볼 때 고른 날. null이면 목록으로 본다. */
-  calendarDay: string | null
-  onCalendarDay: (day: string | null) => void
+  /** 달력에서 고른 날에 일정을 추가한다. */
+  onAddOn: (day: string) => void
 }
 
-export function RecordList({ view, records, now, onDone, onEdit, calendarDay, onCalendarDay }: RecordListProps) {
+export function RecordList({ view, records, now, onDone, onEdit, onAddOn }: RecordListProps) {
   const [removing, setRemoving] = useState<AssistantRecord<'event'> | null>(null)
   const [readingPast, setReadingPast] = useState(false)
   const closePast = useCallback(() => setReadingPast(false), [])
+  const [viewingCalendar, setViewingCalendar] = useState(false)
+  const closeCalendar = useCallback(() => setViewingCalendar(false), [])
   if (records.error) return <p role="alert">{records.error}</p>
   if (!records.loaded) return null
 
@@ -39,18 +40,21 @@ export function RecordList({ view, records, now, onDone, onEdit, calendarDay, on
     const past = records.diaries.filter(({ data }) => data.date < today)
     return (
       <>
+        {/* 좁은 패널에서 일기를 한 화면에 담도록 지난 일기 버튼은 날짜 줄에 둔다. */}
+        <header className="diary-head">
+          <h2>{formatDiaryDate(today)}</h2>
+          {past.length > 0 && (
+            <button className="diary-past" type="button" onClick={() => setReadingPast(true)}>
+              지난 일기 보기
+            </button>
+          )}
+        </header>
         {written ? (
           <article className="diary">
-            <h2>{formatDiaryDate(today)}</h2>
             <p>{written.data.body}</p>
           </article>
         ) : (
           <Empty>밤 {DIARY_HOUR - 12}시가 지나면 오늘의 일기를 써둘게요.</Empty>
-        )}
-        {past.length > 0 && (
-          <button className="diary-past" type="button" onClick={() => setReadingPast(true)}>
-            지난 일기 보기
-          </button>
         )}
         {readingPast && <DiaryHistory diaries={past} onClose={closePast} />}
       </>
@@ -102,23 +106,31 @@ export function RecordList({ view, records, now, onDone, onEdit, calendarDay, on
   }
 
   const layout = (
-    <div className="layout-switch" role="group" aria-label="일정 보기">
-      <button type="button" aria-pressed={calendarDay === null} onClick={() => onCalendarDay(null)}>
-        목록
+    <>
+      <button className="open-calendar" type="button" onClick={() => setViewingCalendar(true)}>
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="15" rx="4" />
+          <path d="M4 10h16M9 3v4M15 3v4" />
+        </svg>
+        달력으로 보기
       </button>
-      <button type="button" aria-pressed={calendarDay !== null} onClick={() => onCalendarDay(calendarDay ?? localDate(now))}>
-        달력
-      </button>
-    </div>
+      {viewingCalendar && (
+        <Calendar
+          records={records}
+          now={now}
+          onClose={closeCalendar}
+          onEdit={(event) => {
+            setViewingCalendar(false)
+            onEdit(event)
+          }}
+          onAdd={(day) => {
+            setViewingCalendar(false)
+            onAddOn(day)
+          }}
+        />
+      )}
+    </>
   )
-  if (calendarDay) {
-    return (
-      <>
-        {layout}
-        <Calendar records={records} now={now} day={calendarDay} onDay={onCalendarDay} onEdit={onEdit} />
-      </>
-    )
-  }
 
   const upcoming = nextOccurrences(records.events, now).filter(
     ({ data }) => localDate(new Date(data.startsAt)) >= localDate(now),

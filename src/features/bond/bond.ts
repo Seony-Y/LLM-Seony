@@ -1,14 +1,31 @@
 import type { AssistantRecord } from '../records/types'
 
+/** giftId는 방의 물건 순서와 같고, 설정에 숨긴 물건으로 저장된다. */
 const LEVELS = [
-  { from: 0, name: '처음 만난 사이', gift: '' },
-  { from: 15, name: '알아가는 사이', gift: '머그컵' },
-  { from: 50, name: '편한 사이', gift: '풍선' },
-  { from: 120, name: '단짝', gift: '작은 새' },
-  { from: 250, name: '가족 같은 사이', gift: '꽃 화관' },
+  { from: 0, name: '처음 만난 사이', gift: '', giftId: '', icon: '' },
+  { from: 15, name: '알아가는 사이', gift: '머그컵', giftId: 'mug', icon: '☕' },
+  { from: 50, name: '편한 사이', gift: '풍선', giftId: 'balloon', icon: '🎈' },
+  { from: 120, name: '단짝', gift: '작은 새', giftId: 'bird', icon: '🐦' },
+  { from: 250, name: '가족 같은 사이', gift: '꽃 화관', giftId: 'crown', icon: '🌸' },
 ]
+
+/** 단계마다 하나씩 생기는 방의 물건. */
+export const GIFTS = LEVELS.slice(1).map(({ from, name, gift, giftId, icon }) => ({
+  id: giftId,
+  name: gift,
+  icon,
+  from,
+  levelName: name,
+}))
+
+/** 방에 보일 물건. 얻었고 숨기지 않은 것만. */
+export function shownGifts(level: number, hidden: string[] = []): boolean[] {
+  return GIFTS.map(({ id }, index) => level > index && !hidden.includes(id))
+}
 const DAILY_LIMIT = 12
 const DONE_POINTS = 2
+/** 하루에 한 번 앱을 열면 받는 출석 점수. */
+const VISIT_POINTS = 1
 
 export interface Bond {
   level: number
@@ -25,7 +42,7 @@ function dayOf(iso: string) {
   return new Date(iso).toDateString()
 }
 
-/** 맡긴 일과 끝낸 일로 쌓인다. 지운 기록도 함께한 일이라 줄어들지 않는다. */
+/** 맡긴 일, 끝낸 일, 출석으로 쌓인다. 지운 기록도 함께한 일이라 줄어들지 않는다. */
 export function bondOf(records: AssistantRecord[]): Bond {
   const daily = new Map<string, number>()
   const add = (iso: string, points: number) => {
@@ -33,7 +50,11 @@ export function bondOf(records: AssistantRecord[]): Bond {
     daily.set(day, (daily.get(day) ?? 0) + points)
   }
   for (const record of records) {
-    if (record.kind === 'setting' || record.kind === 'talk') continue
+    if (record.kind === 'setting') {
+      for (const date of record.data.visits ?? []) add(`${date}T12:00`, VISIT_POINTS)
+      continue
+    }
+    if (record.kind === 'talk') continue
     add(record.createdAt, 1)
     const doneAt = record.kind === 'todo' ? record.data.doneAt : null
     if (doneAt) add(doneAt, DONE_POINTS)

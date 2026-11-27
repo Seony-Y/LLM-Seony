@@ -23,6 +23,9 @@ export function Preferences({ settings, onSaved }: PreferencesProps) {
     event.preventDefault()
     const next = {
       ...draft,
+      // 창을 연 뒤에 고른 방의 물건과 출석은 그대로 둔다.
+      hiddenGifts: settings.hiddenGifts,
+      visits: settings.visits,
       assistantName: draft.assistantName.trim(),
       userName: draft.userName.trim(),
     }

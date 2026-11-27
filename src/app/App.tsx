@@ -24,9 +24,10 @@ import {
   type TodayWeather,
 } from '../features/online/weather'
 import { findTravel } from '../features/online/travel'
+import { shownGifts } from '../features/bond/bond'
 import type { Travel } from '../features/records/serverRecords'
 import { saveRecord } from '../features/records/recordStore'
-import type { AssistantRecord } from '../features/records/types'
+import { SETTINGS_ID, type AssistantRecord } from '../features/records/types'
 import { clearTalk, removeTurn, saveTurn } from '../features/records/talkStore'
 import { serverConfigured } from '../features/records/serverRecords'
 import { useRecords } from '../features/records/useRecords'
@@ -51,7 +52,6 @@ const EXCHANGE_LIMIT = 50
 /** 방금 한 일에 대한 반응이 보인 뒤에 축하한다. */
 const LEVEL_UP_DELAY = 1800
 const SEEN_LEVEL_KEY = 'personal-assistant.bond-level'
-const EVENT_LAYOUT_KEY = 'personal-assistant.event-layout'
 
 /** accent는 방 안 소품의 색. */
 const VIEWS: { view: View; label: string; accent: string; icon: ReactNode }[] = [
@@ -112,11 +112,13 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [raised, setRaised] = useState(false)
   const [editing, setEditing] = useState<AssistantRecord<AddKind>>()
-  const [calendarDay, setCalendarDay] = useState(() => (readEventLayout() === 'calendar' ? localDate(new Date()) : null))
+  /** 달력에서 고른, 일정을 추가할 날. */
+  const [addDay, setAddDay] = useState<string>()
   const [localAi, setLocalAi] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   const { loaded, settings, events, todos, notes, diaries, talk, bond } = records
+  const gifts = useMemo(() => shownGifts(bond.level, settings.hiddenGifts), [bond.level, settings.hiddenGifts])
   const updateStatus = useUpdate(loaded)
   const state = useMemo(
     () => ({ now, settings, events, todos, notes, weather, bondLevel: bond.level }),
@@ -217,6 +219,15 @@ function App() {
   useEffect(() => {
     if (loaded) void updateWidget(buildTimeline(latestState.current)).catch(console.error)
   }, [loaded, settings, events, todos, notes, weather])
+
+  // 하루에 한 번 출석을 남긴다. 날이 바뀐 채로 켜 두어도 다음 날 것이 남는다.
+  const today = localDate(now)
+  useEffect(() => {
+    if (!loaded || settings.visits?.includes(today)) return
+    void saveRecord('setting', { ...settings, visits: [...(settings.visits ?? []), today] }, SETTINGS_ID).catch(
+      console.error,
+    )
+  }, [loaded, settings, today])
 
   useEffect(() => {
     if (!loaded || bond.level <= readSeenLevel()) return
@@ -486,7 +497,7 @@ ${done}` : done,
           </svg>
           {needsAttention && <i className="dot" />}
         </button>
-        <Room scene={scene} sky={weather?.sky ?? 'cloud'} bondLevel={bond.level} hops={hops} cheers={cheers} focus={focus} onTap={tapRoom} />
+        <Room scene={scene} sky={weather?.sky ?? 'cloud'} gifts={gifts} hops={hops} cheers={cheers} focus={focus} onTap={tapRoom} />
       </section>
 
       <section className={raised ? 'panel raised' : 'panel'}>
@@ -550,10 +561,9 @@ ${done}` : done,
               records={records}
               now={now}
               onEdit={setEditing}
-              calendarDay={calendarDay}
-              onCalendarDay={(day) => {
-                setCalendarDay(day)
-                writeEventLayout(day ? 'calendar' : 'list')
+              onAddOn={(day) => {
+                setEditing(undefined)
+                setAddDay(day)
               }}
               onDone={() => {
                 setCheers((count) => count + 1)
@@ -600,12 +610,13 @@ ${done}` : done,
         ) : (
           view !== 'diary' && (
             <AddForm
-              key={`add-${view}-${current?.id ?? ''}-${view === 'event' ? (calendarDay ?? '') : ''}`}
+              key={`add-${view}-${current?.id ?? ''}-${view === 'event' ? (addDay ?? '') : ''}`}
               kind={view}
               editing={current}
-              day={view === 'event' ? (calendarDay ?? undefined) : undefined}
+              day={view === 'event' ? addDay : undefined}
               onSaved={(kind) => {
                 setEditing(undefined)
+                setAddDay(undefined)
                 if (current) setLine({ title: '고쳐뒀어요.', body: '' })
                 else celebrateAdd(kind)
               }}
@@ -639,23 +650,6 @@ function writeSeenLevel(level: number) {
     localStorage.setItem(SEEN_LEVEL_KEY, String(level))
   } catch {
     // 다음에 다시 축하한다.
-  }
-}
-
-/** 일정을 목록과 달력 중 무엇으로 볼지. 저장할 수 없으면 목록으로 연다. */
-function readEventLayout() {
-  try {
-    return localStorage.getItem(EVENT_LAYOUT_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeEventLayout(layout: 'list' | 'calendar') {
-  try {
-    localStorage.setItem(EVENT_LAYOUT_KEY, layout)
-  } catch {
-    // 다음에는 목록으로 연다.
   }
 }
 

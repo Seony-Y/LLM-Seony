@@ -1,10 +1,11 @@
 import { Capacitor } from '@capacitor/core'
 import { useEffect, useRef, useState } from 'react'
 import { exactAlarmAllowed, openExactAlarmSetting } from '../features/notify/notifications'
+import { GIFTS } from '../features/bond/bond'
 import { exportBackup, importBackup } from '../features/records/backup'
-import { emptyTrash, setDeleted } from '../features/records/recordStore'
+import { emptyTrash, saveRecord, setDeleted } from '../features/records/recordStore'
 import { applyUpdate, type UpdateStatus } from '../features/update/appUpdate'
-import type { AssistantRecord } from '../features/records/types'
+import { SETTINGS_ID, type AssistantRecord } from '../features/records/types'
 import { serverConfigured } from '../features/records/serverRecords'
 import type { Records } from '../features/records/useRecords'
 import { requestWidgetPin } from '../features/widget/roomWidget'
@@ -59,6 +60,13 @@ export function Settings({ records, sync, open, updateStatus, onClose }: Setting
     }
   }
 
+  /** 얻은 물건을 방에 두거나 뺀다. 바로 저장한다. */
+  async function toggleGift(id: string) {
+    const hidden = settings.hiddenGifts ?? []
+    const next = hidden.includes(id) ? hidden.filter((other) => other !== id) : [...hidden, id]
+    await saveRecord('setting', { ...settings, hiddenGifts: next }, SETTINGS_ID)
+  }
+
   async function restore(file: File | undefined) {
     if (file) return `${await importBackup(await file.text())}개를 되살렸습니다.`
   }
@@ -81,9 +89,34 @@ export function Settings({ records, sync, open, updateStatus, onClose }: Setting
         <div className="bond">
           <p>
             {settings.assistantName}와 {bond.name}
-            <small>{bond.remaining ? `다음까지 ${bond.remaining}` : '더 가까워질 수 없어요'}</small>
+            <small>
+              출석 {settings.visits?.length ?? 0}일 · {bond.remaining ? `다음까지 ${bond.remaining}` : '더 가까워질 수 없어요'}
+            </small>
           </p>
           <progress value={bond.progress} max={1} aria-label="친밀도" />
+          <ul className="gifts" aria-label="방에 둘 물건">
+            {GIFTS.map((gift, index) => {
+              const owned = bond.level > index
+              const shown = owned && !settings.hiddenGifts?.includes(gift.id)
+              return (
+                <li key={gift.id}>
+                  <button
+                    type="button"
+                    disabled={!owned}
+                    aria-pressed={owned ? shown : undefined}
+                    aria-label={owned ? `${gift.name}, 방에 두기` : `${gift.name}, ${gift.levelName}가 되면 생겨요`}
+                    onClick={() => attempt(() => toggleGift(gift.id))}
+                  >
+                    <span className="icon" aria-hidden="true">
+                      {gift.icon}
+                    </span>
+                    {gift.name}
+                    <small>{owned ? (shown ? '방에 있어요' : '넣어뒀어요') : gift.levelName}</small>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         </div>
         {open && <Preferences settings={settings} onSaved={onClose} />}
         {isNative && (

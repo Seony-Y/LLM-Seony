@@ -30,6 +30,9 @@ export function AddForm({ kind, editing, day, onSaved, onCancel }: AddFormProps)
   const [place, setPlace] = useState(first.place)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // 패널이 좁아 날짜와 장소 줄은 쓰기 시작할 때만 펼친다.
+  const [focused, setFocused] = useState(false)
+  const expanded = focused || text !== '' || editing !== undefined || day !== undefined || error !== ''
 
   async function save(submit: React.FormEvent) {
     submit.preventDefault()
@@ -71,7 +74,15 @@ export function AddForm({ kind, editing, day, onSaved, onCancel }: AddFormProps)
   }
 
   return (
-    <form className="add" onSubmit={save}>
+    <form
+      className="add"
+      onSubmit={save}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        // 폼 안의 다른 칸으로 옮기는 것은 떠난 것이 아니다.
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false)
+      }}
+    >
       {editing && (
         <p className="editing">
           {LABEL[kind]} 고치는 중{kind === 'event' && first.every && ' · 반복 전체가 바뀌어요'}
@@ -117,7 +128,7 @@ export function AddForm({ kind, editing, day, onSaved, onCancel }: AddFormProps)
           </svg>
         </button>
       </div>
-      {kind !== 'note' && (
+      {kind !== 'note' && expanded && (
         <div className="when">
           <input
             aria-label={kind === 'event' ? '날짜' : '언제까지'}

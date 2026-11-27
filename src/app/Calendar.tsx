@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatTime, localDate } from '../features/assistant/speech'
 import { eventsBetween } from '../features/records/repeat'
 import type { AssistantRecord } from '../features/records/types'
@@ -8,18 +8,39 @@ import { formatDiaryDate } from './dates'
 interface CalendarProps {
   records: Records
   now: Date
-  /** 고른 날, YYYY-MM-DD. */
-  day: string
-  onDay: (day: string) => void
   onEdit: (record: AssistantRecord<'event'>) => void
+  /** 고른 날에 일정을 추가한다. day는 YYYY-MM-DD. */
+  onAdd: (day: string) => void
+  onClose: () => void
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 const monthName = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long' })
 
-/** 한 달의 일정, 할 일, 일기를 한눈에 보고, 고른 날의 것을 아래에 펼친다. */
-export function Calendar({ records, now, day, onDay, onEdit }: CalendarProps) {
-  const [month, setMonth] = useState(() => firstOf(new Date(`${day}T00:00`)))
+/** 한 달의 일정, 할 일, 일기를 한눈에 보고, 고른 날의 것을 아래에 펼친다. 패널은 좁아 창으로 띄운다. */
+export function Calendar({ records, now, onEdit, onAdd, onClose }: CalendarProps) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const today = localDate(now)
+  const [day, setDay] = useState(today)
+  const [month, setMonth] = useState(() => firstOf(now))
+
+  useEffect(() => {
+    const element = dialog.current
+    if (!element) return
+    element.showModal()
+    // 안드로이드의 뒤로 가기로 달력만 닫히게 한다.
+    const opened = () => (history.state as { calendar?: boolean } | null)?.calendar
+    if (!opened()) history.pushState({ calendar: true }, '')
+    addEventListener('popstate', onClose)
+    return () => {
+      removeEventListener('popstate', onClose)
+      element.close()
+      // 개발 모드처럼 바로 다시 열리면 기록을 되돌리지 않는다. 그 사이 다시 붙었는지 보려고 나중 값을 읽는다.
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
+      setTimeout(() => !dialog.current && opened() && history.back())
+    }
+  }, [onClose])
+
   const start = new Date(month)
   start.setDate(1 - month.getDay())
   const end = new Date(month.getFullYear(), month.getMonth() + 1, 1)
@@ -33,7 +54,6 @@ export function Calendar({ records, now, day, onDay, onEdit }: CalendarProps) {
     ({ data }) => data.dueDate!,
   )
   const diaries = new Map(records.diaries.map((diary) => [diary.data.date, diary]))
-  const today = localDate(now)
 
   const move = (offset: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + offset, 1))
   const pickedEvents = events.get(day) ?? []
@@ -41,70 +61,90 @@ export function Calendar({ records, now, day, onDay, onEdit }: CalendarProps) {
   const diary = diaries.get(day)
 
   return (
-    <section className="calendar" aria-label="달력">
-      <header>
-        <button type="button" aria-label="지난달" onClick={() => move(-1)}>
-          ‹
-        </button>
-        <h2>{monthName.format(month)}</h2>
-        <button type="button" aria-label="다음 달" onClick={() => move(1)}>
-          ›
-        </button>
-        {(month.getMonth() !== now.getMonth() || month.getFullYear() !== now.getFullYear() || day !== today) && (
-          <button
-            className="today"
-            type="button"
-            onClick={() => {
-              setMonth(firstOf(now))
-              onDay(today)
-            }}
-          >
-            오늘
+    <dialog
+      className="calendar"
+      ref={dialog}
+      aria-label="달력"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div>
+        <header>
+          <button type="button" aria-label="지난달" onClick={() => move(-1)}>
+            ‹
           </button>
-        )}
-      </header>
-      <div className="calendar-grid">
-        {WEEKDAYS.map((name) => (
-          <span key={name} className="weekday" aria-hidden="true">
-            {name}
-          </span>
-        ))}
-        {cells.map((cell) => {
-          const date = localDate(cell)
-          const counts = [
-            events.get(date)?.length && `일정 ${events.get(date)!.length}개`,
-            todos.get(date)?.length && `할 일 ${todos.get(date)!.length}개`,
-            diaries.has(date) && '일기',
-          ].filter(Boolean)
-          return (
+          <h2>{monthName.format(month)}</h2>
+          <button type="button" aria-label="다음 달" onClick={() => move(1)}>
+            ›
+          </button>
+          {(month.getMonth() !== now.getMonth() || month.getFullYear() !== now.getFullYear() || day !== today) && (
             <button
-              key={date}
+              className="today"
               type="button"
-              className={[
-                cell.getMonth() !== month.getMonth() && 'outside',
-                date === today && 'is-today',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              aria-label={[`${cell.getMonth() + 1}월 ${cell.getDate()}일`, ...counts].join(', ')}
-              aria-pressed={date === day}
               onClick={() => {
-                onDay(date)
-                if (cell.getMonth() !== month.getMonth()) setMonth(firstOf(cell))
+                setMonth(firstOf(now))
+                setDay(today)
               }}
             >
-              {cell.getDate()}
-              <span className="marks" aria-hidden="true">
-                {events.has(date) && <i className="event" />}
-                {todos.has(date) && <i className="todo" />}
-                {diaries.has(date) && <i className="diary-mark" />}
-              </span>
+              오늘
             </button>
-          )
-        })}
+          )}
+          <button className="close" type="button" aria-label="달력 닫기" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="calendar-grid">
+          {WEEKDAYS.map((name) => (
+            <span key={name} className="weekday" aria-hidden="true">
+              {name}
+            </span>
+          ))}
+          {cells.map((cell) => {
+            const date = localDate(cell)
+            const counts = [
+              events.get(date)?.length && `일정 ${events.get(date)!.length}개`,
+              todos.get(date)?.length && `할 일 ${todos.get(date)!.length}개`,
+              diaries.has(date) && '일기',
+            ].filter(Boolean)
+            return (
+              <button
+                key={date}
+                type="button"
+                className={[
+                  cell.getMonth() !== month.getMonth() && 'outside',
+                  date === today && 'is-today',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-label={[`${cell.getMonth() + 1}월 ${cell.getDate()}일`, ...counts].join(', ')}
+                aria-pressed={date === day}
+                onClick={() => {
+                  setDay(date)
+                  if (cell.getMonth() !== month.getMonth()) setMonth(firstOf(cell))
+                }}
+              >
+                {cell.getDate()}
+                <span className="marks" aria-hidden="true">
+                  {events.has(date) && <i className="event" />}
+                  {todos.has(date) && <i className="todo" />}
+                  {diaries.has(date) && <i className="diary-mark" />}
+                </span>
+              </button>
+            )
+          })}
       </div>
 
-      <h3>{formatDiaryDate(day)}</h3>
+      <h3>
+        {formatDiaryDate(day)}
+        {day >= today && (
+          <button type="button" onClick={() => onAdd(day)}>
+            이날 일정 추가
+          </button>
+        )}
+      </h3>
       {!pickedEvents.length && !pickedTodos.length && !diary && <p className="empty">이날은 비어 있어요.</p>}
       {(pickedEvents.length > 0 || pickedTodos.length > 0) && (
         <ul className="calendar-day">
@@ -131,7 +171,8 @@ export function Calendar({ records, now, day, onDay, onEdit }: CalendarProps) {
           <p>{diary.data.body}</p>
         </article>
       )}
-    </section>
+      </div>
+    </dialog>
   )
 }
 
