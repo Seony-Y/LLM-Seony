@@ -29,7 +29,16 @@ export interface RecordData {
   /** written은 AI가 쓴 일기일 때, 담은 마지막 대화 시각과 정해진 글. */
   diary: { date: string; body: string; written?: { until: string; rule: string } }
   talk: { turns: Turn[] }
-  setting: { assistantName: string; userName: string; tone: Tone; briefing: boolean; todoReminder: boolean }
+  /** hiddenGifts는 얻었지만 방에서 뺀 물건, visits는 출석한 날(YYYY-MM-DD). */
+  setting: {
+    assistantName: string
+    userName: string
+    tone: Tone
+    briefing: boolean
+    todoReminder: boolean
+    hiddenGifts?: string[]
+    visits?: string[]
+  }
 }
 
 export type Tone = 'warm' | 'nag'

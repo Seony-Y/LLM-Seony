@@ -588,7 +588,14 @@
   margin-bottom: 20px;
 }
 
-.diary h2 {
+.diary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diary-head h2 {
   color: var(--panel-soft);
   font-size: 15px;
   line-height: 44px;
@@ -610,27 +617,17 @@
   font-size: 15px;
 }
 
-.layout-switch {
-  display: flex;
-  align-self: flex-start;
-  gap: 2px;
-  margin-bottom: 8px;
-  padding: 3px;
-  border-radius: 22px;
-  background: var(--field);
-}
-
-.layout-switch button {
-  min-height: 38px;
-  padding: 0 16px;
-  border-radius: 19px;
-  color: var(--panel-soft);
+.open-calendar {
+  display: inline-flex;
+  align-self: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  color: var(--panel-ink);
   font-size: 14px;
-}
-
-.layout-switch button[aria-pressed='true'] {
-  color: var(--on-action);
-  background: var(--action);
+  background: var(--field);
 }
 
 .calendar {
@@ -638,7 +635,21 @@
   --todo-mark: #7fb069;
   --diary-mark: #6f86b8;
 
+  width: min(100% - 32px, 440px);
+  max-height: min(100% - 48px, 760px);
+  padding: 0;
+  border: 0;
+  border-radius: 32px;
   color: var(--panel-ink);
+  background: linear-gradient(var(--panel), var(--panel)), var(--field);
+}
+
+.calendar::backdrop {
+  background: #20243a73;
+}
+
+.calendar > div {
+  padding: 12px 20px 16px;
 }
 
 .calendar header {
@@ -657,10 +668,23 @@
   font-size: 17px;
 }
 
+/* 오늘과 닫기는 오른쪽 끝에 붙인다. */
+.calendar .today,
+.calendar .close {
+  margin-left: auto;
+}
+
+.calendar .today + .close {
+  margin-left: 4px;
+}
+
+.calendar .close {
+  margin-right: -10px;
+}
+
 .calendar .today {
   width: auto;
   height: 36px;
-  margin-left: auto;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -733,10 +757,22 @@
 }
 
 .calendar h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 16px 0 6px;
   color: var(--panel-soft);
   font-size: 15px;
   font-weight: 400;
+}
+
+.calendar h3 button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  color: var(--on-action);
+  font-size: 14px;
+  background: var(--action);
 }
 
 .calendar .calendar-day {
@@ -945,6 +981,61 @@
 .bond progress::-webkit-progress-value {
   border-radius: 5px;
   background: #f0a39a;
+}
+
+.gifts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.settings .gifts li {
+  display: block;
+  min-height: 0;
+  border: 0;
+}
+
+.gifts button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 4px 8px;
+  border: 2px solid transparent;
+  border-radius: 18px;
+  color: var(--panel-ink);
+  font-size: 13px;
+  line-height: 1.3;
+  background: var(--field);
+}
+
+.gifts .icon {
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.gifts small {
+  color: var(--panel-soft);
+  font-size: 11px;
+}
+
+.gifts button[aria-pressed='true'] {
+  border-color: var(--action);
+}
+
+/* 아직 못 얻은 물건은 흐릿하게 보여만 준다. */
+.gifts button:disabled {
+  cursor: default;
+  opacity: 1;
+  color: var(--panel-soft);
+}
+
+.gifts button:disabled .icon {
+  filter: grayscale(1);
+  opacity: 0.35;
 }
 
 .settings li {
