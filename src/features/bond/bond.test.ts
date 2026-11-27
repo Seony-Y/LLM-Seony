@@ -73,3 +73,8 @@ test('출석은 날짜마다 한 번만 세고, 예전 설정에 남긴 출석�
   } as AssistantRecord<'setting'>
   expect(bondOf([legacy, visit('2026-11-01'), visit('2026-11-02'), visit('2026-11-02')])).toMatchObject({ points: 2, visits: 2 })
 })
+
+test('지워진 출석 기록은 세지 않는다', () => {
+  const purged = { id: 'visit-x', kind: 'visit', data: { purged: true }, createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z', deletedAt: '2026-11-01T00:00:00.000Z', dirty: 0 } as never
+  expect(bondOf([purged])).toMatchObject({ points: 0, visits: 0 })
+})

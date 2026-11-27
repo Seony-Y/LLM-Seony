@@ -53,7 +53,8 @@ export function bondOf(records: AssistantRecord[]): Bond {
   }
   const visits = new Set<string>()
   for (const record of records) {
-    if (record.kind === 'visit') visits.add(record.data.date)
+    // 지워진 기록은 날짜가 비어 있다.
+    if (record.kind === 'visit' && typeof record.data.date === 'string') visits.add(record.data.date)
     if (record.kind === 'setting') for (const date of record.data.visits ?? []) visits.add(date)
     if (record.kind === 'setting' || record.kind === 'talk' || record.kind === 'visit') continue
     add(record.createdAt, 1)
