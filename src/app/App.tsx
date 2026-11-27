@@ -54,6 +54,7 @@ import { AddForm, type AddKind } from './AddForm'
 import type { Draft } from './ConfirmCard'
 import { Conversation, type Exchange } from './Conversation'
 import { RecordList, type View } from './RecordList'
+import { Onboarding } from './Onboarding'
 import { Settings } from './Settings'
 import { useDiary } from './useDiary'
 import { useViewport } from './useViewport'
@@ -65,6 +66,7 @@ const EXCHANGE_LIMIT = 50
 /** 방금 한 일에 대한 반응이 보인 뒤에 축하한다. */
 const LEVEL_UP_DELAY = 1800
 const SEEN_LEVEL_KEY = 'personal-assistant.bond-level'
+const ONBOARDED_KEY = 'personal-assistant.onboarded'
 
 /** accent는 방 안 소품의 색. */
 const VIEWS: { view: View; label: string; accent: string; icon: ReactNode }[] = [
@@ -131,6 +133,7 @@ function App() {
   const [addDay, setAddDay] = useState<string>()
   const [localAi, setLocalAi] = useState(false)
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
+  const [onboarding, setOnboarding] = useState(false)
 
   const { loaded, settings, events, todos, notes, diaries, talk, bond } = records
   const gifts = useMemo(() => shownGifts(bond.level, settings.hiddenGifts), [bond.level, settings.hiddenGifts])
@@ -273,6 +276,15 @@ function App() {
     run()
     document.addEventListener('visibilitychange', run)
     return () => document.removeEventListener('visibilitychange', run)
+  }, [loaded])
+
+  // 처음 설치한 기기라면 흩어진 설정을 차례로 안내한다. 쓰던 기기에는 띄우지 않는다.
+  useEffect(() => {
+    if (!loaded || readOnboarded()) return
+    if ([events, todos, notes, diaries, talk].every((list) => list.length === 0)) setOnboarding(true)
+    else writeOnboarded()
+    // 기기를 연 처음 한 번만 본다.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded])
 
   // 하루에 한 번 출석을 남긴다. 설정과 따로 두어 다른 기기에서 바꾼 설정을 덮어쓰지 않는다.
@@ -644,6 +656,7 @@ ${done}` : done,
                 setHops((count) => count + 1)
                 setLine({ title: '하나 끝!', body: '오늘 일기에 적어둘게요.' })
               }}
+              onPostpone={(title) => setLine({ title: '내일로 미뤘어요.', body: `${title}, 내일 다시 챙길게요.` })}
             />
           )}
         </div>
@@ -706,9 +719,41 @@ ${done}` : done,
         open={settingsOpen}
         updateStatus={updateStatus}
         onClose={closeSettings}
+        onOnboarding={() => {
+          setSettingsOpen(false)
+          setOnboarding(true)
+        }}
       />
+      {onboarding && (
+        <Onboarding
+          records={records}
+          sync={sync}
+          onLocation={enableWeather}
+          onClose={() => {
+            writeOnboarded()
+            setOnboarding(false)
+          }}
+        />
+      )}
     </main>
   )
+}
+
+/** 이 기기에서 처음 안내를 봤는지. 저장할 수 없으면 기록이 없을 때 다시 보여줄 뿐이다. */
+function readOnboarded() {
+  try {
+    return localStorage.getItem(ONBOARDED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeOnboarded() {
+  try {
+    localStorage.setItem(ONBOARDED_KEY, '1')
+  } catch {
+    // 다음에 기록이 없으면 다시 안내한다.
+  }
 }
 
 /** 이 기기에서 축하한 단계. 저장할 수 없으면 다시 축하할 뿐이다. */

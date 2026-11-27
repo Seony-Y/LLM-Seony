@@ -168,6 +168,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return permission.display === 'granted'
 }
 
+export async function notificationsAllowed(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false
+  return (await LocalNotifications.checkPermissions()).display === 'granted'
+}
+
 export async function exactAlarmAllowed(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return true
   return (await LocalNotifications.checkExactNotificationSetting()).exact_alarm === 'granted'
