@@ -3,7 +3,7 @@ import { beforeEach, expect, test } from 'vitest'
 import { localDate } from '../assistant/speech'
 import { database } from './db'
 import { loadRecords, saveRecord } from './recordStore'
-import { expandEvents, nextDate, nextOccurrences, seriesId } from './repeat'
+import { eventsBetween, expandEvents, nextDate, nextOccurrences, seriesId } from './repeat'
 import { toggleTodo } from './todoStore'
 import type { AssistantRecord, RecordData, Repeat } from './types'
 
@@ -80,4 +80,13 @@ test('다음 차례를 이미 끝냈으면 되돌려도 남긴다', async () => 
   await toggleTodo('t@2026-11-26', now)
   await toggleTodo('t', now)
   expect((await live()).map(({ dueDate }) => dueDate)).toEqual(['2026-11-25', '2026-11-26', '2026-11-27'])
+})
+
+test('달력은 정한 기간만큼 반복을 펼치고, 기간 밖의 일정은 뺀다', () => {
+  const weekly = event(new Date(2026, 10, 2, 9), { repeat: { every: 'week' } })
+  const once = { ...event(new Date(2027, 2, 20, 9), {}), id: 'once' }
+  const later = { ...event(new Date(2027, 5, 1, 9), {}), id: 'later' }
+  // 펼쳐 두는 60일을 훌쩍 넘긴 3월도 보인다.
+  const march = eventsBetween([weekly, once, later], new Date(2027, 2, 1), new Date(2027, 3, 1))
+  expect(march.map(({ id }) => id)).toEqual(['e@2027-03-01', 'e@2027-03-08', 'e@2027-03-15', 'e@2027-03-22', 'e@2027-03-29', 'once'])
 })

@@ -48,6 +48,8 @@ export function useRecords() {
       loaded: records !== null,
       error,
       events: expandEvents(ofKind('event'), new Date(loadedAt)).sort((a, b) => a.data.startsAt.localeCompare(b.data.startsAt)),
+      /** 펼치기 전, 저장된 그대로의 일정. 달력이 넓은 기간을 펼칠 때 쓴다. */
+      storedEvents: ofKind('event'),
       /** 반복 일정이 처음 시작한 때. */
       seriesStart: (id: string) => ofKind('event').find((event) => event.id === id)?.data.startsAt ?? '',
       todos: ofKind('todo').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),

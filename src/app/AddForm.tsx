@@ -12,6 +12,8 @@ interface AddFormProps {
   kind: AddKind
   /** 고치는 기록. 없으면 새로 추가한다. */
   editing?: AssistantRecord<AddKind>
+  /** 달력에서 고른 날. 새로 추가할 때 그날로 시작한다. */
+  day?: string
   onSaved: (kind: AddKind) => void
   onCancel: () => void
 }
@@ -19,8 +21,8 @@ interface AddFormProps {
 const LABEL = { event: '일정', todo: '할 일', note: '기억할 것' }
 
 /** 보고 있는 탭의 기록만 추가하거나 고친다. */
-export function AddForm({ kind, editing, onSaved, onCancel }: AddFormProps) {
-  const first = initial(kind, editing)
+export function AddForm({ kind, editing, day, onSaved, onCancel }: AddFormProps) {
+  const first = initial(kind, editing, day)
   const [text, setText] = useState(first.text)
   const [date, setDate] = useState(first.date)
   const [time, setTime] = useState(first.time)
@@ -152,10 +154,12 @@ interface Fields {
   place: string
 }
 
-function initial(kind: AddKind, editing?: AssistantRecord<AddKind>): Fields {
+function initial(kind: AddKind, editing?: AssistantRecord<AddKind>, day?: string): Fields {
+  const soonest = localDate(kind === 'event' ? nextHour() : new Date())
   const base: Fields = {
     text: '',
-    date: localDate(kind === 'event' ? nextHour() : new Date()),
+    // 지난 날을 골랐으면 앞으로 올 날로 둔다.
+    date: day && day > soonest ? day : soonest,
     time: formatInputTime(nextHour()),
     every: '',
     place: '',

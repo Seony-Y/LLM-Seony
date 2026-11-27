@@ -32,15 +32,25 @@ export function nextDate({ every, on }: Repeat, date: Date): Date {
 
 /** 반복되는 일정을 하루씩 펼친다. 저장된 것은 하나뿐이고 나머지는 그때그때 만든다. */
 export function expandEvents(events: EventRecord[], now: Date): EventRecord[] {
-  const from = now.getTime() - PAST_DAYS * DAY
-  const to = now.getTime() + FUTURE_DAYS * DAY
+  // 먼 앞날에 시작하는 반복도 첫 차례는 보여준다.
+  return expand(events, now.getTime() - PAST_DAYS * DAY, now.getTime() + FUTURE_DAYS * DAY, true)
+}
+
+/** 달력처럼 정한 기간에 있는 일정만. 반복은 그 기간만큼 펼친다. */
+export function eventsBetween(events: EventRecord[], from: Date, to: Date): EventRecord[] {
+  return expand(events, from.getTime(), to.getTime(), false).filter(({ data }) => {
+    const at = Date.parse(data.startsAt)
+    return at >= from.getTime() && at < to.getTime()
+  })
+}
+
+function expand(events: EventRecord[], from: number, to: number, keepFirst: boolean): EventRecord[] {
   return events.flatMap((event) => {
     const { repeat, skip = [] } = event.data
     if (!repeat) return [event]
     const list: EventRecord[] = []
     let at = new Date(event.data.startsAt)
-    // 먼 앞날에 시작하는 반복도 첫 차례는 보여준다.
-    while (at.getTime() < to || list.length === 0) {
+    while (at.getTime() < to || (keepFirst && list.length === 0)) {
       const date = localDate(at)
       if (at.getTime() >= from && !skip.includes(date)) {
         list.push({
