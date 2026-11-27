@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { defaultSettings, type AssistantRecord } from '../records/types'
-import { tidyDiary } from './api/requestDiary'
-import { pendingDiaries } from './diary'
+import { diaryMaterial, tidyDiary } from './api/requestDiary'
+import { diaryEntry, pendingDiaries } from './diary'
 import type { DayState } from './speech'
 
 function todo(title: string, createdAt: Date, doneAt: Date | null = null): AssistantRecord<'todo'> {
@@ -86,4 +86,21 @@ test('어제 대화만 나눴어도 일기를 쓴다', () => {
 
 test('일기는 한 문단으로 잇고 끊긴 마지막 문장은 버린다', () => {
   expect(tidyDiary('- 오늘은 조용했다.\n\n창밖이 추워 보였다. 내일은')).toBe('오늘은 조용했다. 창밖이 추워 보였다.')
+})
+
+test('일기 자료에 내일 일정을 넣어 마무리할 거리를 준다', () => {
+  const now = new Date(2026, 10, 24, 22)
+  const at = new Date(2026, 10, 25, 15).toISOString()
+  const event: AssistantRecord<'event'> = {
+    id: 'e',
+    kind: 'event',
+    data: { title: '치과', note: '', startsAt: at, remind: true },
+    createdAt: at,
+    updatedAt: at,
+    deletedAt: null,
+    dirty: 0,
+  }
+  const material = diaryMaterial(diaryEntry({ ...state(now), events: [event] }, []))
+  expect(material).toContain('일정: 없음')
+  expect(material).toContain('내일 일정: 오후 3:00 치과')
 })
