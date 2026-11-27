@@ -197,6 +197,51 @@ export function pokeLine(settings: RecordData['setting'], turn: number, bondLeve
   return lines[turn % lines.length]
 }
 
+/** 방의 물건을 누르면 하는 말. close는 단짝부터의 반말. 새와 화관은 단짝이 돼야 생겨 반말만 있다. */
+const GIFT_LINES: Record<string, { polite?: Line[]; close: Line[] }> = {
+  mug: {
+    polite: [
+      { title: '따뜻한 차 한 잔 어때요?', body: '{u}도 잠깐 쉬어가요.' },
+      { title: '후후, 아직 뜨거워요.', body: '식으면 같이 마셔요.' },
+    ],
+    close: [
+      { title: '차 한 잔 할래?', body: '{u} 거는 덜 달게 탔어.' },
+      { title: '후후, 뜨거워.', body: '천천히 마셔. 안 뺏어 먹어.' },
+    ],
+  },
+  balloon: {
+    polite: [
+      { title: '둥실둥실~', body: '풍선이 {u} 쪽으로 가고 싶대요.' },
+      { title: '놓치면 안 돼요!', body: '꽉 잡고 있을게요.' },
+    ],
+    close: [
+      { title: '둥실둥실~', body: '{u} 기분도 이만큼 떴으면 좋겠다.' },
+      { title: '앗, 날아갈 뻔했다.', body: '이거 {u}한테 받은 거라 꼭 잡고 있어야 해.' },
+    ],
+  },
+  bird: {
+    close: [
+      { title: '짹짹!', body: '얘가 {u} 왔다고 노래해.' },
+      { title: '쉿, 노래 연습 중이래.', body: '다 되면 {u}한테 제일 먼저 들려준대.' },
+    ],
+  },
+  crown: {
+    close: [
+      { title: '어때, 잘 어울려?', body: '{u} 생각하면서 만든 거야.' },
+      { title: '반짝반짝!', body: '오늘은 내가 새싹 왕이다.' },
+    ],
+  },
+}
+
+export function giftLine(gift: string, settings: RecordData['setting'], turn: number, bondLevel = 0): Line | null {
+  const lines = GIFT_LINES[gift]
+  if (!lines) return null
+  const list = bondLevel >= CLOSE_LEVEL || !lines.polite ? lines.close : lines.polite
+  const { title, body } = list[turn % list.length]
+  const fill = (text: string) => text.replaceAll('{u}', settings.userName)
+  return { title: fill(title), body: fill(body) }
+}
+
 export function diaryBody({ now, settings, events, todos }: DayState): string {
   const nag = settings.tone === 'nag'
   const count = eventsOn(now, events).length

@@ -126,7 +126,7 @@ export function Calendar({ records, now, onEdit, onAdd, onClose }: CalendarProps
                   if (cell.getMonth() !== month.getMonth()) setMonth(firstOf(cell))
                 }}
               >
-                {cell.getDate()}
+                <span className="day-number">{cell.getDate()}</span>
                 <span className="marks" aria-hidden="true">
                   {events.has(date) && <i className="event" />}
                   {todos.has(date) && <i className="todo" />}

@@ -197,3 +197,36 @@ test('이동 시간은 카카오에서 장소를 찾고 차로 걸리는 분을 
     vi.unstubAllGlobals()
   }
 })
+
+test('장소 후보를 주고, 고른 좌표가 있으면 다시 찾지 않고 길을 찾는다', async () => {
+  const asked: string[] = []
+  vi.stubGlobal('fetch', async (url: string) => {
+    asked.push(url)
+    if (url.includes('dapi.kakao.com')) {
+      return Response.json({
+        documents: [
+          { place_name: '스타벅스 강남역점', road_address_name: '서울 강남구 강남대로 390', address_name: '', x: '127.03', y: '37.5' },
+        ],
+      })
+    }
+    return Response.json({ routes: [{ result_code: 0, summary: { duration: 600 } }] })
+  })
+  const current = { ...env, KAKAO_REST_KEY: 'kakao' }
+  const post = (path: string, body: unknown) => call(path, { method: 'POST', body: JSON.stringify(body) }, KEY, current)
+  try {
+    expect(await (await post('places', { query: '스타벅스', near: { latitude: 37.4, longitude: 127 } })).json()).toEqual([
+      { name: '스타벅스 강남역점', address: '서울 강남구 강남대로 390', latitude: 37.5, longitude: 127.03 },
+    ])
+    expect(asked[0]).toContain('x=127&y=37.4')
+    expect((await post('places', { query: ' ' })).status).toBe(400)
+
+    asked.length = 0
+    const from = { latitude: 37.4, longitude: 127 }
+    const chosen = await post('travel', { from, to: '스타벅스 강남역점', at: { latitude: 37.5, longitude: 127.03 } })
+    expect(await chosen.json()).toEqual({ place: '스타벅스 강남역점', minutes: 10 })
+    expect(asked).toHaveLength(1)
+    expect(asked[0]).toContain('destination=127.03%2C37.5')
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})

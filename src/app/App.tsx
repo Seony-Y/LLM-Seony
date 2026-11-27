@@ -7,6 +7,7 @@ import { isSpoken, parseInput, parseShared, type ParsedInput } from '../features
 import { diaryEntry } from '../features/assistant/diary'
 import { answer, chat, type Answer, type AnswerSource } from '../features/assistant/answer'
 import {
+  giftLine,
   greeting,
   localDate,
   pokeLine,
@@ -24,7 +25,7 @@ import {
   type TodayWeather,
 } from '../features/online/weather'
 import { findTravel } from '../features/online/travel'
-import { shownGifts } from '../features/bond/bond'
+import { GIFTS, shownGifts } from '../features/bond/bond'
 import type { Travel } from '../features/records/serverRecords'
 import { saveRecord } from '../features/records/recordStore'
 import { SETTINGS_ID, type AssistantRecord } from '../features/records/types'
@@ -456,6 +457,13 @@ ${done}` : done,
     setLine(pokeLine(settings, pokes, bond.level))
   }
 
+  function tapGift(index: number) {
+    const line = giftLine(GIFTS[index].id, settings, pokes, bond.level)
+    if (!line) return
+    setPokes((count) => count + 1)
+    setLine(line)
+  }
+
   function speakWeather() {
     void enableWeather().catch((error: Error) =>
       setLine({ title: '날씨를 못 봤어요.', body: error.message }),
@@ -497,7 +505,7 @@ ${done}` : done,
           </svg>
           {needsAttention && <i className="dot" />}
         </button>
-        <Room scene={scene} sky={weather?.sky ?? 'cloud'} gifts={gifts} hops={hops} cheers={cheers} focus={focus} onTap={tapRoom} />
+        <Room scene={scene} sky={weather?.sky ?? 'cloud'} gifts={gifts} onGift={tapGift} hops={hops} cheers={cheers} focus={focus} onTap={tapRoom} />
       </section>
 
       <section className={raised ? 'panel raised' : 'panel'}>
@@ -614,6 +622,7 @@ ${done}` : done,
               kind={view}
               editing={current}
               day={view === 'event' ? addDay : undefined}
+              accessKey={sync.accessKey}
               onSaved={(kind) => {
                 setEditing(undefined)
                 setAddDay(undefined)

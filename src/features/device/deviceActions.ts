@@ -60,7 +60,17 @@ export const canListen = Capacitor.isNativePlatform() || WebRecognition !== unde
 
 /** 한 번 말한 것을 글로 받는다. 말없이 끝나면 빈 글이다. */
 export async function listen(prompt: string): Promise<string> {
-  if (Capacitor.isNativePlatform()) return (await deviceActions.listen({ prompt })).text
+  if (Capacitor.isNativePlatform()) {
+    try {
+      return (await deviceActions.listen({ prompt })).text
+    } catch (cause) {
+      // 화면만 새로 받은 예전 앱에는 음성 입력이 없다.
+      if ((cause as { code?: string }).code === 'UNIMPLEMENTED') {
+        throw new Error('새 앱을 설치하면 말로 입력할 수 있어요.', { cause })
+      }
+      throw cause
+    }
+  }
   if (!WebRecognition) throw new Error('이 브라우저에서는 음성 입력을 쓸 수 없어요.')
   const recognition = new WebRecognition()
   recognition.lang = 'ko-KR'

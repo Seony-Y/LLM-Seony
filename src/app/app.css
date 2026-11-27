@@ -297,6 +297,63 @@
   color: var(--panel-soft);
 }
 
+.place-field {
+  position: relative;
+  display: grid;
+  flex-basis: 100%;
+  gap: 4px;
+}
+
+.place-field .place {
+  width: 100%;
+}
+
+.place-hint {
+  padding-left: 16px;
+  color: var(--panel-soft);
+  font-size: 13px;
+}
+
+/* 폼이 패널 아래쪽에 있어 후보는 입력칸 위로 띄운다. */
+.place-options {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(var(--panel), var(--panel)), var(--field);
+  box-shadow: 0 12px 30px -12px #20243a59;
+}
+
+.panel .place-options li {
+  display: block;
+  min-height: 0;
+  border: 0;
+}
+
+.place-options button {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 16px;
+  text-align: left;
+  color: var(--panel-ink);
+  font-size: 15px;
+}
+
+.place-options li + li button {
+  border-top: 1px solid var(--line);
+}
+
+.place-options small {
+  color: var(--panel-soft);
+  font-size: 13px;
+}
+
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -708,9 +765,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   min-height: 48px;
-  padding-top: 6px;
+  padding-top: 4px;
   border-radius: 14px;
   font-size: 15px;
   font-variant-numeric: tabular-nums;
@@ -720,11 +777,19 @@
   opacity: 0.4;
 }
 
-/* 장면마다 강조색이 글자색과 비슷해 색 대신 밑줄로 표시한다. */
-.calendar-grid .is-today {
+.calendar .day-number {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+}
+
+/* 오늘은 숫자를 동그라미로 채우고, 고른 날은 칸 테두리로 보여 겹쳐도 구분된다. */
+.calendar-grid .is-today .day-number {
+  color: var(--on-action);
   font-weight: 700;
-  text-decoration: underline 2px;
-  text-underline-offset: 4px;
+  background: var(--action);
 }
 
 .calendar-grid button[aria-pressed='true'] {

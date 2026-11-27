@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import type { DayForecast, TodayWeather } from '../online/weather'
-import type { AssistantRecord } from '../records/types'
-import { weatherTip } from './speech'
+import { defaultSettings, type AssistantRecord } from '../records/types'
+import { giftLine, weatherTip } from './speech'
 
 const morning = new Date(2026, 10, 27, 7)
 
@@ -40,4 +40,13 @@ test('비가 없으면 눈, 추위, 더위, 일교차 순으로 하나만 말한
 
 test('그날 예보가 없으면 말하지 않는다', () => {
   expect(weatherTip(new Date(2026, 11, 10, 7), [], weather({ low: -10 }), 'warm')).toBeNull()
+})
+
+test('방의 물건을 누르면 돌아가며 말하고, 단짝부터는 반말이다', () => {
+  const settings = { ...defaultSettings, userName: '대장' }
+  expect(giftLine('mug', settings, 0, 1)).toEqual({ title: '따뜻한 차 한 잔 어때요?', body: '대장도 잠깐 쉬어가요.' })
+  expect(giftLine('mug', settings, 1, 1)?.title).toBe('후후, 아직 뜨거워요.')
+  expect(giftLine('mug', settings, 0, 3)?.title).toBe('차 한 잔 할래?')
+  expect(giftLine('crown', settings, 0, 4)?.body).toBe('대장 생각하면서 만든 거야.')
+  expect(giftLine('없는 물건', settings, 0)).toBeNull()
 })
