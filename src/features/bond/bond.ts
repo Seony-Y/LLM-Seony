@@ -36,6 +36,8 @@ export interface Bond {
   remaining: number
   /** 이번 단계에서 나아간 정도. 0~1. */
   progress: number
+  /** 출석한 날 수. */
+  visits: number
 }
 
 function dayOf(iso: string) {
@@ -49,16 +51,16 @@ export function bondOf(records: AssistantRecord[]): Bond {
     const day = dayOf(iso)
     daily.set(day, (daily.get(day) ?? 0) + points)
   }
+  const visits = new Set<string>()
   for (const record of records) {
-    if (record.kind === 'setting') {
-      for (const date of record.data.visits ?? []) add(`${date}T12:00`, VISIT_POINTS)
-      continue
-    }
-    if (record.kind === 'talk') continue
+    if (record.kind === 'visit') visits.add(record.data.date)
+    if (record.kind === 'setting') for (const date of record.data.visits ?? []) visits.add(date)
+    if (record.kind === 'setting' || record.kind === 'talk' || record.kind === 'visit') continue
     add(record.createdAt, 1)
     const doneAt = record.kind === 'todo' ? record.data.doneAt : null
     if (doneAt) add(doneAt, DONE_POINTS)
   }
+  for (const date of visits) add(`${date}T12:00`, VISIT_POINTS)
   const points = [...daily.values()].reduce((sum, value) => sum + Math.min(value, DAILY_LIMIT), 0)
 
   const level = LEVELS.findLastIndex(({ from }) => points >= from)
@@ -71,5 +73,6 @@ export function bondOf(records: AssistantRecord[]): Bond {
     points,
     remaining: next ? next.from - points : 0,
     progress: next ? (points - from) / (next.from - from) : 1,
+    visits: visits.size,
   }
 }

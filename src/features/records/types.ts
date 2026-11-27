@@ -30,7 +30,9 @@ export interface RecordData {
   /** written은 AI가 쓴 일기일 때, 담은 마지막 대화 시각과 정해진 글. */
   diary: { date: string; body: string; written?: { until: string; rule: string } }
   talk: { turns: Turn[] }
-  /** hiddenGifts는 얻었지만 방에서 뺀 물건, visits는 출석한 날(YYYY-MM-DD). */
+  /** 하루 한 번 앱을 연 날. 기기마다 같은 id(visit-날짜)라 겹쳐도 하나다. */
+  visit: { date: string }
+  /** hiddenGifts는 얻었지만 방에서 뺀 물건. visits는 예전에 설정에 함께 남기던 출석으로, 이제는 visit 기록에 남긴다. */
   setting: {
     assistantName: string
     userName: string

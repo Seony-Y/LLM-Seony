@@ -16,7 +16,7 @@ interface Row {
   deleted_at: string | null
 }
 
-const KINDS = ['event', 'todo', 'note', 'diary', 'talk', 'setting']
+const KINDS = ['event', 'todo', 'note', 'diary', 'talk', 'setting', 'visit']
 const CHAT_MODEL = '@cf/google/gemma-4-26b-a4b-it'
 const CHAT_ROLES = ['system', 'user', 'assistant']
 const MAX_MESSAGES = 20

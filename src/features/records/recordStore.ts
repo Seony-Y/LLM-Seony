@@ -123,15 +123,21 @@ export async function importLegacySchedules(): Promise<void> {
   notifyRecords()
 }
 
-/** 일기 쓰는 방식을 바꾸기 전에 쓴 일기. 다시 쓰도록 한 번만 지운다. 또 바꾸면 시각을 올린다. */
+/**
+ * 일기 쓰는 방식을 바꾸기 전에 쓴 일기. 다시 쓰도록 한 번만 지운다. 또 바꾸면 시각을 올린다.
+ * 다시 쓰는 것은 어제와 오늘 일기뿐이라, 그보다 지난 일기는 남긴다.
+ */
 const DIARY_RESET_BEFORE = '2026-11-27T06:50:00.000Z'
 
-export async function resetOldDiaries(): Promise<void> {
+export async function resetOldDiaries(now = new Date()): Promise<void> {
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  const rewritable = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
   const transaction = (await database).transaction(['records', 'meta'], 'readwrite')
   if ((await transaction.objectStore('meta').get('diaryReset')) === DIARY_RESET_BEFORE) return
   const store = transaction.objectStore('records')
   for (const record of await store.getAll()) {
     if (record.kind !== 'diary' || isPurged(record) || record.updatedAt >= DIARY_RESET_BEFORE) continue
+    if (record.data.date < rewritable) continue
     const updatedAt = nextTimestamp(record.updatedAt)
     await store.put({
       ...record,

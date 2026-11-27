@@ -90,7 +90,7 @@ export function Settings({ records, sync, open, updateStatus, onClose }: Setting
           <p>
             {settings.assistantName}와 {bond.name}
             <small>
-              출석 {settings.visits?.length ?? 0}일 · {bond.remaining ? `다음까지 ${bond.remaining}` : '더 가까워질 수 없어요'}
+              출석 {bond.visits}일 · {bond.remaining ? `다음까지 ${bond.remaining}` : '더 가까워질 수 없어요'}
             </small>
           </p>
           <progress value={bond.progress} max={1} aria-label="친밀도" />
@@ -209,6 +209,7 @@ function saveStatus(sync: Sync, pending: number) {
 function recordTitle(record: AssistantRecord) {
   if (record.kind === 'event' || record.kind === 'todo') return record.data.title
   if (record.kind === 'note' || record.kind === 'diary') return record.data.body
+  if (record.kind === 'visit') return '출석'
   return record.kind === 'setting' ? '설정' : '대화'
 }
 
