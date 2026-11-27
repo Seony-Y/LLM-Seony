@@ -7,7 +7,7 @@ import { isSpoken, parseInput, parseShared, type ParsedInput } from '../features
 import { diaryEntry } from '../features/assistant/diary'
 import { answer, chat, type Answer, type AnswerSource } from '../features/assistant/answer'
 import { greeting, pokeLine, sceneFor, weatherLine, weatherSummary, type Line } from '../features/assistant/speech'
-import { composeMessage, dial, onSharedText, shareToKakao } from '../features/device/deviceActions'
+import { canListen, composeMessage, dial, listen, onSharedText, shareToKakao } from '../features/device/deviceActions'
 import { applyNotifications, requestNotificationPermission } from '../features/notify/notifications'
 import {
   getTodayWeather,
@@ -90,6 +90,7 @@ function App() {
   const [view, changeView] = useState<View>('event')
   const [focus, setFocus] = useState({ target: roomTarget('event'), count: 0 })
   const [prompt, setPrompt] = useState('')
+  const [listening, setListening] = useState(false)
   const [line, setLine] = useState<Line | null>(null)
   const [pokes, setPokes] = useState(0)
   const [hops, setHops] = useState(0)
@@ -215,6 +216,22 @@ function App() {
     changeView(next)
     setFocus(({ count }) => ({ target: roomTarget(next), count: count + 1 }))
     setEditing(undefined)
+  }
+
+  /** 말한 것을 입력칸에 넣는다. 잘못 들었을 수 있어 보내기는 직접 누른다. */
+  async function speak() {
+    setListening(true)
+    try {
+      const heard = await listen(`${settings.assistantName}에게 말해요`)
+      if (heard) {
+        setPrompt(heard)
+        promptInput.current?.focus()
+      }
+    } catch (error) {
+      setLine({ title: '잘 못 들었어요.', body: error instanceof Error ? error.message : '' })
+    } finally {
+      setListening(false)
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -523,11 +540,26 @@ ${done}` : done,
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
-            <button type="submit" aria-label="보내기" disabled={thinking}>
-              <svg width="22" height="22" viewBox="0 0 24 24">
-                <path d="M12 19V5M6 11l6-6 6 6" />
-              </svg>
-            </button>
+            {canListen && !prompt.trim() ? (
+              <button
+                className={listening ? 'listening' : undefined}
+                type="button"
+                aria-label="말로 하기"
+                disabled={listening}
+                onClick={speak}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24">
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                </svg>
+              </button>
+            ) : (
+              <button type="submit" aria-label="보내기" disabled={thinking}>
+                <svg width="22" height="22" viewBox="0 0 24 24">
+                  <path d="M12 19V5M6 11l6-6 6 6" />
+                </svg>
+              </button>
+            )}
           </form>
         ) : (
           view !== 'diary' && (

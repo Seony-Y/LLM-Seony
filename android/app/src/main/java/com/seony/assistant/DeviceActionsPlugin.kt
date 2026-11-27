@@ -6,11 +6,14 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.MediaStore
+import android.speech.RecognizerIntent
+import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
+import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
@@ -55,6 +58,28 @@ class DeviceActionsPlugin : Plugin() {
             .setPackage(KAKAO_PACKAGE)
             .putExtra(Intent.EXTRA_TEXT, message)
         launch(intent, call, "카카오톡 앱을 찾지 못했습니다.")
+    }
+
+    /** 시스템 음성 입력 창을 띄운다. 마이크는 그 앱이 쓰므로 권한을 받지 않는다. */
+    @PluginMethod
+    fun listen(call: PluginCall) {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, call.getString("prompt"))
+        try {
+            startActivityForResult(call, intent, "listenResult")
+        } catch (_: ActivityNotFoundException) {
+            call.reject("음성 입력 앱을 찾지 못했습니다.")
+        }
+    }
+
+    @ActivityCallback
+    private fun listenResult(call: PluginCall?, result: ActivityResult) {
+        if (call == null) return
+        // 말없이 닫으면 빈 글을 돌려준다.
+        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
+        call.resolve(JSObject().put("text", text.orEmpty()))
     }
 
     @PluginMethod

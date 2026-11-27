@@ -189,6 +189,20 @@
   box-shadow: inset 0 -4px 0 #0002;
 }
 
+.prompt .listening:disabled {
+  cursor: default;
+  opacity: 1;
+  animation: listening 1.2s ease-in-out infinite;
+}
+
+@keyframes listening {
+  50% {
+    box-shadow:
+      inset 0 -4px 0 #0002,
+      0 0 0 6px color-mix(in srgb, var(--action) 25%, transparent);
+  }
+}
+
 .editing {
   display: flex;
   align-items: center;
@@ -990,7 +1004,8 @@
     transition: none;
   }
 
-  .panel nav button[aria-pressed='true'] svg {
+  .panel nav button[aria-pressed='true'] svg,
+  .prompt .listening {
     animation: none;
   }
 }
