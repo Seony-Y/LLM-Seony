@@ -1,4 +1,15 @@
-import { DIARY_HOUR, dueTodos, formatTime, greeting, localDate, sceneFor, type DayState, type Scene } from '../assistant/speech'
+import {
+  DIARY_HOUR,
+  doneOn,
+  dueTodos,
+  formatTime,
+  greeting,
+  localDate,
+  sceneFor,
+  type DayState,
+  type Scene,
+} from '../assistant/speech'
+import type { AssistantRecord } from '../records/types'
 
 export interface WidgetEntry {
   /** 이 시각부터 보여준다. */
@@ -15,6 +26,14 @@ const HOUR = 3_600_000
 /** 또리의 말이나 배경이 바뀔 수 있는 시각. */
 const TURNING_HOURS = [0, 5, 11, 21, DIARY_HOUR]
 const EVENT_LINES = 2
+/** 할 일 위젯에 보여줄 수. */
+const TODO_ITEMS = 20
+
+export interface TodoItem {
+  id: string
+  title: string
+  done: boolean
+}
 
 /** 앱이 꺼져 있어도 위젯이 때에 맞게 바뀌도록 앞으로의 모습을 미리 만든다. */
 export function buildTimeline(state: DayState): WidgetEntry[] {
@@ -69,4 +88,11 @@ function dayLabel(date: Date, now: Date) {
   if (localDate(date) === localDate(now)) return ''
   if (localDate(date) === localDate(tomorrow)) return '내일 '
   return `${date.getMonth() + 1}/${date.getDate()} `
+}
+
+/** 할 일 위젯의 목록. 오늘까지 할 일이 먼저, 오늘 끝낸 일은 되돌릴 수 있게 뒤에 둔다. */
+export function todoItems(todos: AssistantRecord<'todo'>[], now: Date): TodoItem[] {
+  return [...dueTodos(now, todos), ...doneOn(now, todos)]
+    .slice(0, TODO_ITEMS)
+    .map(({ id, data }) => ({ id, title: data.title, done: data.doneAt !== null }))
 }

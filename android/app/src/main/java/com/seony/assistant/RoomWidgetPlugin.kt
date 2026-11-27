@@ -32,6 +32,23 @@ class RoomWidgetPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun updateTodos(call: PluginCall) {
+        val todos = call.getString("todos")
+        if (todos == null) {
+            call.reject("위젯에 보여줄 할 일이 필요합니다.")
+            return
+        }
+        TodoWidget.save(context, todos)
+        call.resolve()
+    }
+
+    /** 위젯에서 체크하거나 푼 할 일. 넘긴 뒤에는 비운다. */
+    @PluginMethod
+    fun takeTodoChanges(call: PluginCall) {
+        call.resolve(JSObject().put("changes", JSObject.fromJSONObject(TodoWidget.takeChanges(context))))
+    }
+
+    @PluginMethod
     fun requestPin(call: PluginCall) {
         val manager = AppWidgetManager.getInstance(context)
         val requested = manager.isRequestPinAppWidgetSupported &&
