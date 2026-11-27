@@ -8,6 +8,7 @@ import { toggleTodo } from '../features/records/todoStore'
 import type { AssistantRecord, RecordData } from '../features/records/types'
 import type { Records } from '../features/records/useRecords'
 import type { AddKind } from './AddForm'
+import { Calendar } from './Calendar'
 import { ConfirmModal } from './ConfirmModal'
 import { DiaryHistory } from './DiaryHistory'
 import { formatDay, formatDiaryDate, formatDue } from './dates'
@@ -20,9 +21,12 @@ interface RecordListProps {
   now: Date
   onDone: (title: string) => void
   onEdit: (record: AssistantRecord<AddKind>) => void
+  /** 일정을 달력으로 볼 때 고른 날. null이면 목록으로 본다. */
+  calendarDay: string | null
+  onCalendarDay: (day: string | null) => void
 }
 
-export function RecordList({ view, records, now, onDone, onEdit }: RecordListProps) {
+export function RecordList({ view, records, now, onDone, onEdit, calendarDay, onCalendarDay }: RecordListProps) {
   const [removing, setRemoving] = useState<AssistantRecord<'event'> | null>(null)
   const [readingPast, setReadingPast] = useState(false)
   const closePast = useCallback(() => setReadingPast(false), [])
@@ -97,12 +101,39 @@ export function RecordList({ view, records, now, onDone, onEdit }: RecordListPro
     )
   }
 
+  const layout = (
+    <div className="layout-switch" role="group" aria-label="일정 보기">
+      <button type="button" aria-pressed={calendarDay === null} onClick={() => onCalendarDay(null)}>
+        목록
+      </button>
+      <button type="button" aria-pressed={calendarDay !== null} onClick={() => onCalendarDay(calendarDay ?? localDate(now))}>
+        달력
+      </button>
+    </div>
+  )
+  if (calendarDay) {
+    return (
+      <>
+        {layout}
+        <Calendar records={records} now={now} day={calendarDay} onDay={onCalendarDay} onEdit={onEdit} />
+      </>
+    )
+  }
+
   const upcoming = nextOccurrences(records.events, now).filter(
     ({ data }) => localDate(new Date(data.startsAt)) >= localDate(now),
   )
-  if (!upcoming.length) return <Empty>잡힌 일정이 없어요. 아래에서 추가해 보세요.</Empty>
+  if (!upcoming.length) {
+    return (
+      <>
+        {layout}
+        <Empty>잡힌 일정이 없어요. 아래에서 추가해 보세요.</Empty>
+      </>
+    )
+  }
   return (
     <>
+      {layout}
       <ul>
         {upcoming.map((event) => {
           const { data } = event

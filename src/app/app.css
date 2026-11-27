@@ -610,6 +610,172 @@
   font-size: 15px;
 }
 
+.layout-switch {
+  display: flex;
+  align-self: flex-start;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 3px;
+  border-radius: 22px;
+  background: var(--field);
+}
+
+.layout-switch button {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 19px;
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.layout-switch button[aria-pressed='true'] {
+  color: var(--on-action);
+  background: var(--action);
+}
+
+.calendar {
+  --event-mark: #e08a72;
+  --todo-mark: #7fb069;
+  --diary-mark: #6f86b8;
+
+  color: var(--panel-ink);
+}
+
+.calendar header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.calendar header button {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+.calendar h2 {
+  font-size: 17px;
+}
+
+.calendar .today {
+  width: auto;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  font-size: 14px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.calendar .weekday {
+  color: var(--panel-soft);
+  font-size: 12px;
+  line-height: 28px;
+  text-align: center;
+}
+
+.calendar-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 48px;
+  padding-top: 6px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-grid .outside {
+  opacity: 0.4;
+}
+
+/* 장면마다 강조색이 글자색과 비슷해 색 대신 밑줄로 표시한다. */
+.calendar-grid .is-today {
+  font-weight: 700;
+  text-decoration: underline 2px;
+  text-underline-offset: 4px;
+}
+
+.calendar-grid button[aria-pressed='true'] {
+  background: var(--field);
+  box-shadow: inset 0 0 0 2px var(--action);
+}
+
+.calendar .marks {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+
+.calendar .marks i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.calendar .marks .event {
+  background: var(--event-mark);
+}
+
+.calendar .marks .todo {
+  background: var(--todo-mark);
+}
+
+.calendar .marks .diary-mark {
+  background: var(--diary-mark);
+}
+
+.calendar h3 {
+  margin: 16px 0 6px;
+  color: var(--panel-soft);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.calendar .calendar-day {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.panel .calendar-day li {
+  display: block;
+  min-height: 0;
+  border: 0;
+}
+
+.calendar-day li > * {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  overflow-wrap: anywhere;
+  text-align: left;
+  background: var(--field);
+}
+
+.calendar-day time {
+  flex: none;
+  min-width: 64px;
+  color: var(--panel-soft);
+  font-size: 14px;
+}
+
+.calendar-day .done > span {
+  color: var(--panel-soft);
+  text-decoration: line-through;
+}
+
 .diary-history {
   width: min(100% - 32px, 440px);
   max-height: min(100% - 48px, 720px);
