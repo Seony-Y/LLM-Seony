@@ -76,6 +76,17 @@
                 android:textColor="@color/widget_soft_morning"
                 android:textSize="13sp" />
 
+            <ImageView
+                android:id="@+id/widget_voice"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/widget_action_morning"
+                android:contentDescription="@string/widget_voice"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_mic" />
+
             <TextView
                 android:id="@+id/widget_prompt"
                 android:layout_width="wrap_content"

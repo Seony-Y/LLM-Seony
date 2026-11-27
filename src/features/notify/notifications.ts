@@ -1,5 +1,9 @@
 import { Capacitor } from '@capacitor/core'
-import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications'
+import {
+  LocalNotifications,
+  type ActionPerformed,
+  type LocalNotificationSchema,
+} from '@capacitor/local-notifications'
 import type { AssistantRecord } from '../records/types'
 import { anniversaries } from '../recall/anniversary'
 import { relatedNotes } from '../recall/recall'
@@ -15,6 +19,11 @@ const TODO_TITLES = 3
 const EVENT_LIMIT = 120
 
 const MEMORY_LEAD = 30 * 60_000
+/** 알림의 "10분 뒤 다시". */
+const SNOOZE = 10 * 60_000
+const SNOOZE_KEY = 'personal-assistant.snoozes'
+/** 알림 버튼 묶음. 할 일은 하나일 때만 끝낼 수 있다. */
+const ACTION_TYPES = { todo: 'todo-one', later: 'later' } as const
 /** 걸리는 시간에 더해 챙기고 나설 여유. */
 const TRAVEL_SPARE = 10 * 60_000
 /** 이보다 가까우면 출발 알림이 필요 없다. */
@@ -48,6 +57,7 @@ export function planNotifications(state: PlanState, travel = new Map<string, Tra
     title: event.data.title,
     body: event.data.note || `${settings.assistantName}: 지금이에요.`,
     schedule: { at: new Date(event.data.startsAt), allowWhileIdle: true },
+    actionTypeId: ACTION_TYPES.later,
   }))
 
   // 만나기 전에 떠올릴 수 있게, 아는 것이 있는 일정만 미리 알린다.
@@ -90,6 +100,7 @@ export function planNotifications(state: PlanState, travel = new Map<string, Tra
       title: `${event.data.title}, 나설 시간이에요`,
       body: `${route.place}까지 차로 ${route.minutes}분쯤 걸려요.`,
       schedule: { at, allowWhileIdle: true },
+      actionTypeId: ACTION_TYPES.later,
     })
   }
 
@@ -123,6 +134,7 @@ export function planNotifications(state: PlanState, travel = new Map<string, Tra
         title: `${title} ${todos.length}개`,
         body: todoTitles(todos),
         schedule: { at, allowWhileIdle: true },
+        ...(todos.length === 1 && { actionTypeId: ACTION_TYPES.todo, extra: { todoId: todos[0].id } }),
       })
     }
   }
@@ -161,9 +173,77 @@ export function applyNotifications(state: PlanState, travel?: Map<string, Travel
     if (notifications.length) {
       await LocalNotifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) })
     }
-    const planned = planNotifications(state, travel)
+    const planned = [...planNotifications(state, travel), ...snoozed(state.now)]
     if (planned.length) await LocalNotifications.schedule({ notifications: planned })
   }
   queue = queue.then(run, run)
   return queue
+}
+
+/** 미뤄둔 알림. 예약을 새로 할 때 지워지지 않도록 기기에 둔다. */
+interface Snooze {
+  id: number
+  at: number
+  title: string
+  body: string
+}
+
+function readSnoozes(): Snooze[] {
+  try {
+    return JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? '[]') as Snooze[]
+  } catch {
+    return []
+  }
+}
+
+function writeSnoozes(snoozes: Snooze[]) {
+  try {
+    localStorage.setItem(SNOOZE_KEY, JSON.stringify(snoozes))
+  } catch {
+    // 저장하지 못하면 다음 예약 때 미룬 알림이 빠질 뿐이다.
+  }
+}
+
+export function snoozed(now: Date): LocalNotificationSchema[] {
+  return readSnoozes()
+    .filter(({ at }) => at > now.getTime())
+    .map(({ id, at, title, body }) => ({
+      id,
+      title,
+      body,
+      schedule: { at: new Date(at), allowWhileIdle: true },
+      actionTypeId: ACTION_TYPES.later,
+    }))
+}
+
+/** 알림을 10분 뒤에 다시 울리도록 남긴다. 예약은 applyNotifications가 한다. */
+export function snooze(
+  { id, title, body }: Pick<LocalNotificationSchema, 'id' | 'title' | 'body'>,
+  now = new Date(),
+) {
+  const kept = readSnoozes().filter(({ at }) => at > now.getTime())
+  const again = { id: notificationId(`later:${id}:${now.getTime()}`), at: now.getTime() + SNOOZE, title, body }
+  writeSnoozes([...kept, again])
+}
+
+/** 알림 버튼 묶음을 등록한다. 앱을 열 때 한 번 부른다. */
+export async function registerNotificationActions(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return
+  await LocalNotifications.registerActionTypes({
+    types: [
+      { id: ACTION_TYPES.todo, actions: [{ id: 'done', title: '끝냄' }] },
+      { id: ACTION_TYPES.later, actions: [{ id: 'later', title: '10분 뒤 다시' }] },
+    ],
+  })
+}
+
+/** 알림의 버튼을 눌러 앱이 열렸을 때 부른다. 알림 자체를 누른 것은 tap이다. */
+export function onNotificationAction(
+  listener: (action: 'done' | 'later' | 'tap', notification: ActionPerformed['notification']) => void,
+): () => void {
+  if (!Capacitor.isNativePlatform()) return () => {}
+  const handle = LocalNotifications.addListener('localNotificationActionPerformed', ({ actionId, notification }) => {
+    listener(actionId === 'done' || actionId === 'later' ? actionId : 'tap', notification)
+  })
+  return () => void handle.then((registered) => registered.remove()).catch(console.error)
 }

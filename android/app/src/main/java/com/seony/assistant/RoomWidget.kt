@@ -32,6 +32,7 @@ class RoomWidget : AppWidgetProvider() {
 
     companion object {
         const val ACTION_PROMPT = "com.seony.assistant.PROMPT"
+        const val ACTION_VOICE = "com.seony.assistant.VOICE"
         private const val ACTION_REFRESH = "com.seony.assistant.REFRESH_WIDGET"
         private const val PREFERENCES = "room_widget"
         private const val KEY_TIMELINE = "timeline"
@@ -114,6 +115,9 @@ class RoomWidget : AppWidgetProvider() {
             views.setTextColor(R.id.widget_prompt, context.getColor(scene.onAction))
             views.setInt(R.id.widget_prompt, "setBackgroundResource", scene.action)
             views.setOnClickPendingIntent(R.id.widget_prompt, open(context, ACTION_PROMPT))
+            views.setInt(R.id.widget_voice, "setBackgroundResource", scene.action)
+            views.setInt(R.id.widget_voice, "setColorFilter", context.getColor(scene.onAction))
+            views.setOnClickPendingIntent(R.id.widget_voice, open(context, ACTION_VOICE))
             return views
         }
 
